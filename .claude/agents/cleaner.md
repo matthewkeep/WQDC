@@ -37,6 +37,12 @@ END
 
 First line must be `Option Explicit`, not metadata.
 
+## VBA Compile Order
+
+Modules compile alphabetically. Type definition modules need `AAA` prefix:
+- `AAATypes.bas` → compiles before `Data.bas`, `Modes.bas`, etc.
+- Without prefix, modules referencing types fail with "Variable not defined"
+
 ## Language-Specific Artifacts
 
 | Language | Strip on clean |
