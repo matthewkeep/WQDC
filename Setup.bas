@@ -141,12 +141,19 @@ Private Sub SetupInput()
 End Sub
 
 Private Sub MakeIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As Long)
-    Dim h() As String, i As Long
-    ReDim h(1 To n + 4)
+    Dim h() As String, i As Long, tbl As ListObject
+    ReDim h(1 To n + 5)
     h(1) = Schema.IR_COL_SOURCE: h(2) = Schema.IR_COL_FLOW
     For i = 0 To n - 1: h(3 + i) = chem(i): Next i
     h(n + 3) = Schema.IR_COL_SAMPLE_DATE: h(n + 4) = Schema.IR_COL_ACTIVE
+    h(n + 5) = Schema.IR_COL_ACTION
     MakeTbl ws, ws.Range("A9"), Schema.TABLE_IR, h
+
+    ' Style action column header as "Add" link
+    Set tbl = ws.ListObjects(Schema.TABLE_IR)
+    If Not tbl Is Nothing Then
+        StyleActionHeader tbl, Schema.IR_COL_ACTION, Schema.ACTION_ADD
+    End If
 End Sub
 
 ' ==== Config Sheet ===========================================================
@@ -190,11 +197,17 @@ End Sub
 ' ==== History Sheet ==========================================================
 
 Private Sub SetupHistory()
-    Dim ws As Worksheet
+    Dim ws As Worksheet, tbl As ListObject
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
     ws.Range("A1") = "History": ws.Range("A1").Font.Bold = True
     MakeTbl ws, ws.Range("A2"), Schema.TABLE_HISTORY, _
-        Array("RunId", "Timestamp", "RunDate", "Site", "SampleDate", "Mode", "TriggerDay", "TriggerMetric", "Status")
+        Array("RunId", "Timestamp", "RunDate", "Site", "Days", "Mode", "TriggerDay", "TriggerMetric", "Status", Schema.HISTORY_COL_ACTION)
+
+    ' Style action column header
+    Set tbl = ws.ListObjects(Schema.TABLE_HISTORY)
+    If Not tbl Is Nothing Then
+        StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
+    End If
 End Sub
 
 ' ==== Test Data ==============================================================
@@ -221,8 +234,9 @@ Private Sub SeedInput()
     Set tbl = ws.ListObjects(Schema.TABLE_IR)
     If Not tbl Is Nothing Then
         EnsureRows tbl, 2
-        tbl.DataBodyRange.Rows(1) = Array("CB1", 1.5, 350, 60, 2.8, 16, 7, 11, 0.12, Date - 3, "Yes")
-        tbl.DataBodyRange.Rows(2) = Array("CB2", 0.8, 280, 40, 2.2, 14, 5.5, 9, 0.08, Date - 4, "Yes")
+        tbl.DataBodyRange.Rows(1) = Array("CB1", 1.5, 350, 60, 2.8, 16, 7, 11, 0.12, Date - 3, "Yes", Schema.ACTION_REMOVE)
+        tbl.DataBodyRange.Rows(2) = Array("CB2", 0.8, 280, 40, 2.2, 14, 5.5, 9, 0.08, Date - 4, "Yes", Schema.ACTION_REMOVE)
+        StyleActionColumn tbl, Schema.IR_COL_ACTION
     End If
 End Sub
 
@@ -302,56 +316,32 @@ Private Sub SetupLog()
     MakeTbl ws, ws.Range("A3"), Schema.TABLE_LOG_DAILY, h
 End Sub
 
-' ==== Controls (Buttons, Dropdowns) =========================================
+' ==== Controls (Run Cell, Dropdowns) =========================================
 
 Private Sub SetupControls()
-    Dim ws As Worksheet, btn As Shape
+    Dim ws As Worksheet, runCell As Range
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_INPUT)
 
-    ' Remove existing buttons
+    ' Remove old buttons if they exist
     On Error Resume Next
     ws.Shapes("btnRun").Delete
     ws.Shapes("btnRollback").Delete
     ws.Shapes("btnRefresh").Delete
     On Error GoTo 0
 
-    ' Refresh button (loads site data)
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 310, 5, 80, 28)
-    With btn
-        .Name = "btnRefresh"
-        .TextFrame2.TextRange.Text = "Load Site"
-        .TextFrame2.TextRange.Font.Size = 10
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
-        .Fill.ForeColor.RGB = RGB(68, 114, 196)
-        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
-        .Line.Visible = msoFalse
-        .OnAction = "Loader.RefreshSiteData"
+    ' Create Run Simulation cell (L1) - double-click to run
+    Set runCell = ws.Range("L1")
+    runCell.Value = "Run Simulation"
+    With runCell
+        .Font.Bold = True
+        .Font.Color = Schema.COLOR_FONT_WHITE
+        .Interior.Color = Schema.COLOR_BUTTON_ON
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlThin
     End With
-
-    ' Run button
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 400, 5, 80, 28)
-    With btn
-        .Name = "btnRun"
-        .TextFrame2.TextRange.Text = "Run"
-        .TextFrame2.TextRange.Font.Size = 11
-        .TextFrame2.TextRange.Font.Bold = msoTrue
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
-        .Fill.ForeColor.RGB = RGB(112, 173, 71)
-        .Line.Visible = msoFalse
-        .OnAction = "WQOC.Run"
-    End With
-
-    ' Rollback button
-    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 490, 5, 80, 28)
-    With btn
-        .Name = "btnRollback"
-        .TextFrame2.TextRange.Text = "Rollback"
-        .TextFrame2.TextRange.Font.Size = 11
-        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
-        .Fill.ForeColor.RGB = RGB(191, 191, 191)
-        .Line.Visible = msoFalse
-        .OnAction = "WQOC.Rollback"
-    End With
+    AddNm Schema.NAME_RUN_CELL, runCell
 
     ' Rain mode dropdown validation
     With ws.Range(Schema.NAME_RAIN_MODE).Validation
@@ -392,4 +382,37 @@ End Sub
 Private Sub EnsureRows(ByVal tbl As ListObject, ByVal n As Long)
     Do While tbl.ListRows.Count < n: tbl.ListRows.Add: Loop
     If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.ClearContents
+End Sub
+
+Private Sub StyleActionHeader(ByVal tbl As ListObject, ByVal colName As String, ByVal txt As String)
+    ' Style the header cell of an action column (blue, underlined, hyperlink-like)
+    Dim col As ListColumn, hdrCell As Range
+    On Error Resume Next
+    Set col = tbl.ListColumns(colName)
+    On Error GoTo 0
+    If col Is Nothing Then Exit Sub
+
+    Set hdrCell = tbl.HeaderRowRange.Cells(1, col.Index)
+    If Len(txt) > 0 Then hdrCell.Value = txt
+    With hdrCell
+        .Font.Color = Schema.COLOR_ACTION_FONT
+        .Font.Underline = xlUnderlineStyleSingle
+        .Font.Bold = False
+    End With
+End Sub
+
+Private Sub StyleActionColumn(ByVal tbl As ListObject, ByVal colName As String)
+    ' Style data cells in action column (blue, underlined)
+    Dim col As ListColumn, dataRng As Range
+    On Error Resume Next
+    Set col = tbl.ListColumns(colName)
+    On Error GoTo 0
+    If col Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    Set dataRng = tbl.DataBodyRange.Columns(col.Index)
+    With dataRng
+        .Font.Color = Schema.COLOR_ACTION_FONT
+        .Font.Underline = xlUnderlineStyleSingle
+    End With
 End Sub

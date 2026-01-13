@@ -4,10 +4,18 @@ Option Explicit
 
 Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As String)
     ' Records run metadata to history table. RunId must match SimLog entry.
-    Dim ws As Worksheet, tbl As ListObject, row As ListRow
+    Dim ws As Worksheet, tbl As ListObject, row As ListRow, i As Long
     On Error Resume Next
     Set ws = GetHSheet(): If ws Is Nothing Then Exit Sub
     Set tbl = GetHTbl(ws): If tbl Is Nothing Then Exit Sub
+
+    ' Update existing rows' action to "Rollback"
+    If Not tbl.DataBodyRange Is Nothing Then
+        For i = 1 To tbl.ListRows.Count
+            tbl.DataBodyRange.Cells(i, 10).Value = Schema.ACTION_ROLLBACK
+            StyleActionCell tbl.DataBodyRange.Cells(i, 10)
+        Next i
+    End If
 
     Set row = tbl.ListRows.Add: If row Is Nothing Then Exit Sub
 
@@ -21,6 +29,8 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
         .Cells(1, 7).Value = r.TriggerDay
         .Cells(1, 8).Value = r.TriggerMetric
         .Cells(1, 9).Value = Schema.HISTORY_STATUS_ACTIVE
+        .Cells(1, 10).Value = Schema.ACTION_CURRENT
+        StyleActionCell .Cells(1, 10)
     End With
     On Error GoTo 0
 End Sub
@@ -186,4 +196,11 @@ Private Function GetSite() As String
     If Not ws Is Nothing Then GetSite = CStr(ws.Range(Schema.NAME_SITE).Value)
     On Error GoTo 0
 End Function
+
+Private Sub StyleActionCell(ByVal cell As Range)
+    With cell
+        .Font.Color = Schema.COLOR_ACTION_FONT
+        .Font.Underline = xlUnderlineStyleSingle
+    End With
+End Sub
 

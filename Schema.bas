@@ -38,7 +38,8 @@ Public Const IR_COL_SOURCE As String = "Source"
 Public Const IR_COL_FLOW As String = "Flow (ML/d)"
 Public Const IR_COL_ACTIVE As String = "Active"
 Public Const IR_COL_SAMPLE_DATE As String = "Sample Date"
-Public Const IR_COL_ACTION As String = "Add Source"
+Public Const IR_COL_ACTION As String = "Action"
+Public Const HISTORY_COL_ACTION As String = "Action"
 Public Const TABLE_IR As String = "tblIR"
 Public Const TABLE_RAIN As String = "tblRainTotals"
 Public Const TABLE_RAIN_WQ As String = "tblRainWQ"
@@ -50,6 +51,14 @@ Public Const TABLE_HISTORY As String = "tblHistory"
 
 Public Const HISTORY_STATUS_ACTIVE As String = "Active"
 Public Const HISTORY_STATUS_ROLLEDBACK As String = "RolledBack"
+
+' ==== Action Cell Constants ================================
+Public Const NAME_RUN_CELL As String = "Run_Simulation"
+Public Const ACTION_ADD As String = "Add"
+Public Const ACTION_REMOVE As String = "Remove"
+Public Const ACTION_ROLLBACK As String = "Rollback"
+Public Const ACTION_CURRENT As String = "Current"
+Public Const COLOR_ACTION_FONT As Long = &HC16305        ' #0563C1 - Blue hyperlink
 
 ' ==== Color Constants (HEX) ================================
 ' Sheet/Table colors
