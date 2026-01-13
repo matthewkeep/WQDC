@@ -13,11 +13,10 @@ Public Sub Build()
     SetupInput
     SetupConfig
     SetupResults
-    SetupRain
-    SetupHistory
+    SetupTelemetry
     SetupChart
-    SetupLog
     SetupControls
+    ' Note: Log and History tables are created on-demand per site
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     MsgBox "Structure created.", vbInformation, "Setup"
@@ -37,7 +36,7 @@ Public Sub Seed()
     SeedInput
     SeedConfig
     SeedResults
-    SeedRain
+    SeedTelemetry
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     MsgBox "Test data seeded.", vbInformation, "Setup"
@@ -47,12 +46,116 @@ Fail:
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
-Public Sub BuildAll(): Build: Seed: End Sub
+Public Sub BuildAll(): Build: Seed: Initialize: End Sub
+
+Public Sub Initialize()
+    ' Reads all RR sites from tblCatalog and creates per-site infrastructure:
+    ' - Telemetry columns (EC, Vol for each site)
+    ' - Log tables (tblLog_{site})
+    ' - History tables (tblHistory_{site})
+    ' Safe to run multiple times - only creates what doesn't exist
+    Dim cm As XlCalculation, sites As Variant, site As Variant
+    Dim created As Long
+    On Error GoTo Fail
+    cm = Application.Calculation
+    Application.ScreenUpdating = False: Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    sites = GetAllSites()
+    If Not IsArray(sites) Then
+        MsgBox "No sites found in Catalog. Add sites to tblCatalog first.", vbExclamation, "Initialize"
+        GoTo Done
+    End If
+
+    created = 0
+    For Each site In sites
+        If Len(site) > 0 Then
+            If EnsureSiteTelemColumns(CStr(site)) Then
+                created = created + 1
+                SeedSiteTelemetry CStr(site)  ' Seed sample data for new columns
+            End If
+            EnsureSiteLogTable CStr(site)
+            EnsureSiteHistoryTable CStr(site)
+        End If
+    Next site
+
+    Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    MsgBox "Initialized " & UBound(sites) - LBound(sites) + 1 & " site(s).", vbInformation, "Initialize"
+    Exit Sub
+Done:
+    Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    Exit Sub
+Fail:
+    Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    MsgBox "Error: " & Err.Description, vbExclamation, "Initialize"
+End Sub
+
+Private Function GetAllSites() As Variant
+    ' Returns array of unique RR site names from first column of tblCatalog
+    Dim ws As Worksheet, tbl As ListObject, row As ListRow
+    Dim dict As Object, site As String
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
+    If ws Is Nothing Then Exit Function
+    Set tbl = ws.ListObjects(Schema.TABLE_CATALOG)
+    On Error GoTo 0
+    If tbl Is Nothing Then Exit Function
+    If tbl.ListRows.Count = 0 Then Exit Function
+
+    Set dict = New DictionaryShim
+    For Each row In tbl.ListRows
+        site = Trim$(CStr(row.Range.Cells(1, 1).Value))
+        If Len(site) > 0 And Not dict.Exists(site) Then
+            dict.Add site, True
+        End If
+    Next row
+
+    If dict.Count = 0 Then Exit Function
+    GetAllSites = dict.Keys
+End Function
+
+Private Function EnsureSiteTelemColumns(ByVal site As String) As Boolean
+    ' Adds EC and Vol columns for site to telemetry table if they don't exist
+    ' Returns True if columns were added
+    Dim ws As Worksheet, tbl As ListObject
+    Dim ecCol As String, volCol As String
+    Dim addedAny As Boolean
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
+    On Error GoTo 0
+    If tbl Is Nothing Then Exit Function
+
+    ecCol = Schema.TelemECColName(site)
+    volCol = Schema.TelemVolColName(site)
+
+    ' Add EC column if missing
+    On Error Resume Next
+    If tbl.ListColumns(ecCol) Is Nothing Then
+        tbl.ListColumns.Add
+        tbl.ListColumns(tbl.ListColumns.Count).Name = ecCol
+        addedAny = True
+    End If
+    On Error GoTo 0
+
+    ' Add Vol column if missing
+    On Error Resume Next
+    If tbl.ListColumns(volCol) Is Nothing Then
+        tbl.ListColumns.Add
+        tbl.ListColumns(tbl.ListColumns.Count).Name = volCol
+        addedAny = True
+    End If
+    On Error GoTo 0
+
+    EnsureSiteTelemColumns = addedAny
+End Function
 
 Public Sub Clean()
     Dim ws As Worksheet, nm As Name, sheets As Variant, i As Long
     sheets = Array(Schema.SHEET_INPUT, Schema.SHEET_CONFIG, Schema.SHEET_RESULTS, _
-                   Schema.SHEET_RAIN, Schema.SHEET_HISTORY, Schema.SHEET_CHART, Schema.SHEET_LOG)
+                   Schema.SHEET_TELEMETRY, Schema.SHEET_HISTORY, Schema.SHEET_CHART, Schema.SHEET_LOG)
     Application.DisplayAlerts = False
     For i = LBound(sheets) To UBound(sheets)
         On Error Resume Next
@@ -74,7 +177,7 @@ Private Sub MakeSheets()
     MakeSheet Schema.SHEET_INPUT
     MakeSheet Schema.SHEET_CONFIG
     MakeSheet Schema.SHEET_RESULTS
-    MakeSheet Schema.SHEET_RAIN
+    MakeSheet Schema.SHEET_TELEMETRY
     MakeSheet Schema.SHEET_HISTORY
     MakeSheet Schema.SHEET_CHART
     MakeSheet Schema.SHEET_LOG
@@ -106,7 +209,7 @@ Private Sub SetupInput()
     ws.Range("A3") = "Latest": ws.Range("A4") = "Trigger": ws.Range("A5") = "Predicted"
     AddNm Schema.NAME_INIT_VOL, ws.Range("B3")
     AddNm Schema.NAME_TRIGGER_VOL, ws.Range("B4")
-    AddNm Schema.NAME_TRIGGER_RESULT_VOL, ws.Range("B5")
+    AddNm Schema.NAME_RESULT_VOL, ws.Range("B5")
     AddNm Schema.NAME_RES_ROW, ws.Range("C3").Resize(1, n)
     AddNm Schema.NAME_LIMIT_ROW, ws.Range("C4").Resize(1, n)
 
@@ -130,6 +233,13 @@ Private Sub SetupInput()
     ws.Range("N10") = "Surface Frac": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O10")
     ws.Range("N11") = "Net Outflow": AddNm Schema.NAME_NET_OUT, ws.Range("O11")
 
+    ' Enhanced Config
+    ws.Range("N13") = "Enhanced Config": ws.Range("N13:O13").Font.Bold = True
+    ws.Range("N14") = "Enhanced Mode": AddNm Schema.NAME_ENHANCED_MODE, ws.Range("O14")
+    ws.Range("N15") = "Mixing Model": AddNm Schema.NAME_MIXING_MODEL, ws.Range("O15")
+    ws.Range("N16") = "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("O16")
+    ws.Range("N17") = "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("O17")
+
     ' Hidden mass
     ws.Range("Q6") = "Hidden Mass": ws.Range("Q6:R6").Font.Bold = True
     For i = 0 To n - 1: ws.Cells(7 + i, 17) = chem(i): Next i
@@ -149,10 +259,10 @@ Private Sub MakeIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As
     h(n + 5) = Schema.IR_COL_ACTION
     MakeTbl ws, ws.Range("A9"), Schema.TABLE_IR, h
 
-    ' Style action column header as "Add" link
+    ' Set action column header text (no blue styling - table style has blue background)
     Set tbl = ws.ListObjects(Schema.TABLE_IR)
     If Not tbl Is Nothing Then
-        StyleActionHeader tbl, Schema.IR_COL_ACTION, Schema.ACTION_ADD
+        tbl.ListColumns(Schema.IR_COL_ACTION).Name = Schema.ACTION_ADD
     End If
 End Sub
 
@@ -185,29 +295,18 @@ Private Sub SetupResults()
     MakeTbl ws, ws.Range("A2"), Schema.TABLE_RESULTS, h
 End Sub
 
-' ==== Rain Sheet =============================================================
+' ==== Telemetry Sheet ========================================================
 
-Private Sub SetupRain()
+Private Sub SetupTelemetry()
+    ' Creates base telemetry table with Date and Rain columns only
+    ' Per-site EC/Vol columns are added by Initialize
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RAIN)
-    ws.Range("A1") = "Rainfall": ws.Range("A1").Font.Bold = True
-    MakeTbl ws, ws.Range("A2"), Schema.TABLE_RAIN, Array("Date", "Rain (mm)")
-End Sub
-
-' ==== History Sheet ==========================================================
-
-Private Sub SetupHistory()
-    Dim ws As Worksheet, tbl As ListObject
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
-    ws.Range("A1") = "History": ws.Range("A1").Font.Bold = True
-    MakeTbl ws, ws.Range("A2"), Schema.TABLE_HISTORY, _
-        Array("RunId", "Timestamp", "RunDate", "Site", "Days", "Mode", "TriggerDay", "TriggerMetric", "Status", Schema.HISTORY_COL_ACTION)
-
-    ' Style action column header
-    Set tbl = ws.ListObjects(Schema.TABLE_HISTORY)
-    If Not tbl Is Nothing Then
-        StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
-    End If
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    ws.Range("A1") = "Telemetry Data": ws.Range("A1").Font.Bold = True
+    ws.Range("A2") = "Daily observations - leave cells blank if data unavailable"
+    ws.Range("A3") = "Run 'Initialize' after setting up Catalog to add site columns"
+    MakeTbl ws, ws.Range("A5"), Schema.TABLE_TELEMETRY, _
+        Array(Schema.TELEM_COL_DATE, Schema.TELEM_COL_RAIN)
 End Sub
 
 ' ==== Test Data ==============================================================
@@ -228,7 +327,12 @@ Private Sub SeedInput()
     ws.Range(Schema.NAME_RAIN_MODE) = "Typical"
     ws.Range(Schema.NAME_SURFACE_FRACTION) = 0.8
     ws.Range(Schema.NAME_NET_OUT) = 1
+
+    ' Enhanced config defaults
     ws.Range(Schema.NAME_ENHANCED_MODE) = "On"
+    ws.Range(Schema.NAME_MIXING_MODEL) = Schema.MIXING_TWOBUCKET
+    ws.Range(Schema.NAME_RAINFALL_MODE) = Schema.RAINFALL_HINDCAST
+    ws.Range(Schema.NAME_TELEM_CAL) = Schema.TELEM_CAL_OFF
 
     Dim tbl As ListObject
     Set tbl = ws.ListObjects(Schema.TABLE_IR)
@@ -272,19 +376,54 @@ Private Sub SeedResults()
     End If
 End Sub
 
-Private Sub SeedRain()
+Private Sub SeedTelemetry()
+    ' Seeds 14 days of sample telemetry data (rain only - EC/Vol are per-site)
+    ' Run Initialize after SeedConfig to add site-specific columns
     Dim ws As Worksheet, tbl As ListObject, d As Date, i As Long
     Dim rain As Variant
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RAIN)
-    Set tbl = ws.ListObjects(Schema.TABLE_RAIN)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     d = Date - 14
+    ' Rain data (mm) - all days have data
     rain = Array(0, 2.5, 0, 8.3, 1.2, 0, 0, 5.6, 3.1, 0, 12.4, 4.2, 0.8, 0)
+
     If Not tbl Is Nothing Then
         EnsureRows tbl, 14
         For i = 0 To 13
-            tbl.DataBodyRange.Rows(i + 1) = Array(d + i, rain(i))
+            tbl.DataBodyRange.Cells(i + 1, 1) = d + i
+            tbl.DataBodyRange.Cells(i + 1, 2) = rain(i)
         Next i
     End If
+End Sub
+
+Private Sub SeedSiteTelemetry(ByVal site As String)
+    ' Seeds sample EC/Vol data for a specific site
+    Dim ws As Worksheet, tbl As ListObject, i As Long
+    Dim ecCol As Long, volCol As Long
+    Dim ec As Variant, vol As Variant
+
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    ' Get column indices for this site
+    On Error Resume Next
+    ecCol = tbl.ListColumns(Schema.TelemECColName(site)).Index
+    volCol = tbl.ListColumns(Schema.TelemVolColName(site)).Index
+    On Error GoTo 0
+    If ecCol = 0 Or volCol = 0 Then Exit Sub
+
+    ' Sample data - EC with some gaps, Volume sparse
+    ec = Array(280, 285, 290, Empty, Empty, 310, 305, 300, Empty, 295, 290, 285, 280, 275)
+    vol = Array(Empty, Empty, Empty, Empty, Empty, 155, Empty, Empty, Empty, Empty, 160, Empty, Empty, 158)
+
+    For i = 0 To 13
+        If i < tbl.ListRows.Count Then
+            If Not IsEmpty(ec(i)) Then tbl.DataBodyRange.Cells(i + 1, ecCol) = ec(i)
+            If Not IsEmpty(vol(i)) Then tbl.DataBodyRange.Cells(i + 1, volCol) = vol(i)
+        End If
+    Next i
 End Sub
 
 ' ==== Chart Sheet ============================================================
@@ -296,25 +435,93 @@ Private Sub SetupChart()
     ws.Range("A2") = "Run WQOC.Run to generate charts"
 End Sub
 
-' ==== Log Sheet =============================================================
+' ==== Per-Site Table Creation (called on-demand) =============================
 
-Private Sub SetupLog()
-    Dim ws As Worksheet, chem As Variant, n As Long, h() As String, i As Long
+Public Sub EnsureSiteLogTable(ByVal site As String)
+    ' Creates log table for site if it doesn't exist
+    Dim ws As Worksheet, tbl As ListObject, tblName As String
+    Dim chem As Variant, n As Long, h() As String, i As Long
+    Dim startCol As Long
+
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    tblName = Schema.LogTableName(site)
+
+    ' Check if table already exists
+    On Error Resume Next
+    Set tbl = ws.ListObjects(tblName)
+    On Error GoTo 0
+    If Not tbl Is Nothing Then Exit Sub
+
+    ' Find position for new table (after existing tables)
+    startCol = FindNextTableColumn(ws)
+
+    ' Build header
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
-
-    ws.Range("A1") = "Simulation Log (persistent - all runs stored)"
-    ws.Range("A1").Font.Bold = True
-
-    ' Log table header: RunId, Date, Day, Volume, EC, F_U, F_Mn, SO4, Mg, Ca, TAN
     ReDim h(1 To n + 4)
-    h(1) = "RunId"
-    h(2) = "Date"
-    h(3) = "Day"
-    h(4) = Schema.VOLUME_METRIC_NAME
+    h(1) = "RunId": h(2) = "Date": h(3) = "Day": h(4) = Schema.VOLUME_METRIC_NAME
     For i = 1 To n: h(4 + i) = chem(i - 1): Next i
-    MakeTbl ws, ws.Range("A3"), Schema.TABLE_LOG_DAILY, h
+
+    ' Add site label above table
+    ws.Cells(1, startCol).Value = site & " Log"
+    ws.Cells(1, startCol).Font.Bold = True
+
+    ' Create table
+    MakeTbl ws, ws.Cells(3, startCol), tblName, h
 End Sub
+
+Public Sub EnsureSiteHistoryTable(ByVal site As String)
+    ' Creates history table for site if it doesn't exist
+    Dim ws As Worksheet, tbl As ListObject, tblName As String
+    Dim startCol As Long
+
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    tblName = Schema.HistoryTableName(site)
+
+    ' Check if table already exists
+    On Error Resume Next
+    Set tbl = ws.ListObjects(tblName)
+    On Error GoTo 0
+    If Not tbl Is Nothing Then Exit Sub
+
+    ' Find position for new table (after existing tables)
+    startCol = FindNextTableColumn(ws)
+
+    ' Add site label above table
+    ws.Cells(1, startCol).Value = site & " History"
+    ws.Cells(1, startCol).Font.Bold = True
+
+    ' Create table (no Site column - site is in table name)
+    MakeTbl ws, ws.Cells(3, startCol), tblName, _
+        Array("RunId", "Timestamp", "RunDate", "Days", "Mode", "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION)
+
+    ' Style action column header
+    Set tbl = ws.ListObjects(tblName)
+    If Not tbl Is Nothing Then
+        StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
+    End If
+End Sub
+
+Public Sub EnsureSiteTables(ByVal site As String)
+    ' Ensures both log and history tables exist for site
+    EnsureSiteLogTable site
+    EnsureSiteHistoryTable site
+End Sub
+
+Private Function FindNextTableColumn(ByVal ws As Worksheet) As Long
+    ' Returns the column where the next table should start (after existing tables + gap)
+    Dim tbl As ListObject, maxCol As Long
+    maxCol = 0
+    For Each tbl In ws.ListObjects
+        If tbl.Range.Column + tbl.Range.Columns.Count > maxCol Then
+            maxCol = tbl.Range.Column + tbl.Range.Columns.Count
+        End If
+    Next tbl
+    If maxCol = 0 Then
+        FindNextTableColumn = 1
+    Else
+        FindNextTableColumn = maxCol + Schema.TABLE_GAP_COLS
+    End If
+End Function
 
 ' ==== Controls (Run Cell, Dropdowns) =========================================
 
@@ -359,6 +566,24 @@ Private Sub SetupControls()
     With ws.Range(Schema.NAME_SITE).Validation
         .Delete
         .Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & Schema.TABLE_CATALOG & "[RR]"")"
+    End With
+
+    ' Mixing model dropdown validation
+    With ws.Range(Schema.NAME_MIXING_MODEL).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:=Schema.MIXING_MODEL_LIST
+    End With
+
+    ' Rainfall mode dropdown validation
+    With ws.Range(Schema.NAME_RAINFALL_MODE).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:=Schema.RAINFALL_MODE_LIST
+    End With
+
+    ' Telemetry calibration dropdown validation
+    With ws.Range(Schema.NAME_TELEM_CAL).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:=Schema.TELEM_CAL_LIST
     End With
 End Sub
 
