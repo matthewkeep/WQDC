@@ -30,6 +30,8 @@ or
 [STEWARD] BREAK: Category - file:line description
 ```
 
+If break found → handoff to **Fixer** for resolution.
+
 ## Scope
 
 Run after refactors. Run before commits if asked.

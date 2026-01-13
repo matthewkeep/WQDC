@@ -62,3 +62,8 @@ Compile Error
 ## Principle
 
 Fix the problem. Only the problem. Move on.
+
+## Handoffs
+
+- After fix verified → return to calling agent or **Navigator**
+- If can't locate issue → **Scout**

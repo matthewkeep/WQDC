@@ -78,3 +78,8 @@ If worksheetObject Is Nothing Then Exit Sub
 ## Output
 
 Cleaned file. Note line reduction. Move on.
+
+## Handoffs
+
+- If cleaning breaks something → **Fixer**
+- When done → return to **Overseer** or **Navigator**

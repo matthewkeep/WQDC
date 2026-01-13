@@ -44,3 +44,9 @@ Key files: X.bas (purpose), Y.bas (purpose)
 ## Principle
 
 Get bearings fast. Point, don't narrate.
+
+## Handoffs
+
+- After locating → return to calling agent
+- Found problem → **Fixer**
+- Found mess → **Cleaner** or **Overseer**
