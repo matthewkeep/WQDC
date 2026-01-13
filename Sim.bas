@@ -1,4 +1,3 @@
-Attribute VB_Name = "Sim"
 Option Explicit
 ' Sim: Core simulation loop.
 ' Dependencies: Types, Modes

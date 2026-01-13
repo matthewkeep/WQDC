@@ -1,4 +1,3 @@
-Attribute VB_Name = "Data"
 Option Explicit
 ' Data: Worksheet I/O.
 ' Dependencies: Types, Schema

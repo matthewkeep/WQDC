@@ -1,4 +1,3 @@
-Attribute VB_Name = "WQOC"
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
 ' Dependencies: Types, Data, Sim, History

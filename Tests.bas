@@ -1,4 +1,3 @@
-Attribute VB_Name = "Tests"
 Option Explicit
 ' Tests: Smoke tests for core modules.
 ' Dependencies: Types, Modes, Sim

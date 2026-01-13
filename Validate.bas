@@ -1,4 +1,3 @@
-Attribute VB_Name = "Validate"
 Option Explicit
 ' Validate: Pre-flight workbook structure checks.
 ' Dependencies: Schema

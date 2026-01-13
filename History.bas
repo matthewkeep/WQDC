@@ -1,4 +1,3 @@
-Attribute VB_Name = "History"
 Option Explicit
 ' History: Audit trail for simulation runs.
 ' Dependencies: Types, Schema

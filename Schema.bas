@@ -1,4 +1,3 @@
-Attribute VB_Name = "Schema"
 Option Explicit
 ' Schema: Constants and configuration.
 ' Dependencies: None

@@ -1,4 +1,3 @@
-Attribute VB_Name = "Types"
 Option Explicit
 ' Types: Core type definitions.
 ' Dependencies: None

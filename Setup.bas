@@ -1,4 +1,3 @@
-Attribute VB_Name = "Setup"
 Option Explicit
 ' Setup: Workbook scaffolding and test data.
 ' Dependencies: Schema

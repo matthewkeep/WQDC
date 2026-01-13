@@ -1,4 +1,3 @@
-Attribute VB_Name = "Modes"
 Option Explicit
 ' Modes: Simulation step functions.
 ' Dependencies: Types

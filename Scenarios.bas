@@ -1,4 +1,3 @@
-Attribute VB_Name = "Scenarios"
 Option Explicit
 ' Scenarios: Regression tests for simulation math.
 ' Dependencies: Types, Sim, Modes
