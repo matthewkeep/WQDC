@@ -10,6 +10,7 @@ Invoke when user says:
 - "next"
 - "what now"
 - "what's next"
+- "test"
 - "navigator"
 
 ## Principles

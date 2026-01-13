@@ -48,6 +48,10 @@ Phase 3: Verify
 Phase 4: Commit
   → Package reviewable chunks
   → Follow foundation commit style
+
+Phase 5: Handoff
+  → Call navigator for next step
+  → Or return control to user
 ```
 
 ## Economy Rules
