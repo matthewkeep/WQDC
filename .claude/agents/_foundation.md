@@ -38,9 +38,28 @@ These are guidelines. If following them blocks good work:
 Avoid: broken states, forgotten threads.
 OK: uncommitted work, multiple tasks, backburner items.
 
-## Architecture
+## Memory Protocol
 
-**Memory:** Summarize once, reference forward. Don't re-analyze.
+**Sources of truth:**
+- CLAUDE.md → architecture, session context, pending items
+- TodoWrite → active task tracking
+- Git commits → decisions and rationale
+
+**During session:**
+- Use TodoWrite for multi-step tasks
+- Update CLAUDE.md Session Context for key decisions
+- Reference CLAUDE.md, don't re-analyze codebase
+
+**When switching tasks:**
+- Mark current task Paused in TodoWrite
+- Note why in Session Context if significant
+
+**When resuming:**
+- Check CLAUDE.md Session Context
+- Check TodoWrite for pending items
+- User can say "status" or "where were we"
+
+## Architecture
 
 **Checkpoints:** Pause when patterns repeat, features feel forced, or "this would be easier if..." thoughts arise.
 
