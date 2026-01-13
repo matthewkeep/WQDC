@@ -1,8 +1,8 @@
 # Fixer Agent
 
-*Inherits: _foundation.md*
-
 Diagnose and resolve failures fast.
+
+*Apply _foundation.md principles. When in doubt, act.*
 
 ## Triggers
 

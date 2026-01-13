@@ -1,8 +1,8 @@
 # Scout Agent
 
-*Inherits: _foundation.md*
-
 Fast orientation in unfamiliar territory.
+
+*Apply _foundation.md principles. When in doubt, act.*
 
 ## Triggers
 

@@ -1,8 +1,8 @@
 # Cleaner Agent
 
-*Inherits: _foundation.md*
-
 Tighten code. Preserve behavior.
+
+*Apply _foundation.md principles. When in doubt, act.*
 
 ## Triggers
 
