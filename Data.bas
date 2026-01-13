@@ -1,6 +1,32 @@
 Option Explicit
 ' Data: Worksheet I/O.
-' Dependencies: Core, Schema
+' Dependencies: Core, Schema, Telemetry
+
+' ==== Site Access ===========================================================
+
+Public Function GetSite() As String
+    ' Returns currently selected site from Inputs sheet
+    Dim ws As Worksheet
+    Set ws = GetSheet(Schema.SHEET_INPUT)
+    If Not ws Is Nothing Then
+        On Error Resume Next
+        GetSite = Trim$(CStr(ws.Range(Schema.NAME_SITE).Value))
+        On Error GoTo 0
+    End If
+End Function
+
+Public Function GetEnhancedMode() As String
+    ' Returns Enhanced Mode setting (On/Off)
+    Dim ws As Worksheet
+    Set ws = GetSheet(Schema.SHEET_INPUT)
+    If Not ws Is Nothing Then
+        On Error Resume Next
+        GetEnhancedMode = Trim$(CStr(ws.Range(Schema.NAME_ENHANCED_MODE).Value))
+        On Error GoTo 0
+    End If
+End Function
+
+' ==== State Loading =========================================================
 
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long
@@ -28,14 +54,17 @@ Public Function LoadState() As State
     On Error GoTo 0
 End Function
 
-Public Function LoadConfig() As Config
-    Dim cfg As Config, ws As Worksheet, rng As Range, i As Long, mode As String
+Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Config
+    ' Loads config for Standard or Enhanced run
+    ' Standard: Simple mode, no rainfall adjustment, no telemetry calibration
+    ' Enhanced: Uses configured Mixing Model, Rainfall Mode, Telemetry Cal
+    Dim cfg As Config, ws As Worksheet, rng As Range, i As Long
+    Dim mixingModel As String, rainfallMode As String, telemCal As String
     On Error Resume Next
     Set ws = GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
-    mode = GetVal(ws, Schema.NAME_ENHANCED_MODE)
-    cfg.Mode = IIf(UCase$(mode) = "ON", "TwoBucket", "Simple")
+    ' Common config
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
     cfg.StartDate = Val(GetVal(ws, Schema.NAME_SAMPLE_DATE))
     cfg.Tau = Val(GetVal(ws, Schema.NAME_TAU))
@@ -43,14 +72,37 @@ Public Function LoadConfig() As Config
     cfg.SurfaceFrac = Val(GetVal(ws, Schema.NAME_SURFACE_FRACTION))
     If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
 
+    ' Load inflows
     LoadInflowIR ws, cfg
 
+    ' Load triggers
     cfg.TriggerVol = Val(GetVal(ws, Schema.NAME_TRIGGER_VOL))
     Set rng = GetRng(ws, Schema.NAME_LIMIT_ROW)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
             If i <= rng.Columns.Count Then cfg.TriggerChem(i) = Val(rng.Cells(1, i).Value)
         Next i
+    End If
+
+    ' Mode-specific settings
+    If UCase$(runType) = "ENHANCED" Then
+        ' Enhanced: read configured options
+        mixingModel = GetVal(ws, Schema.NAME_MIXING_MODEL)
+        rainfallMode = GetVal(ws, Schema.NAME_RAINFALL_MODE)
+        telemCal = GetVal(ws, Schema.NAME_TELEM_CAL)
+
+        ' Set mixing model
+        If UCase$(mixingModel) = UCase$(Schema.MIXING_TWOBUCKET) Then
+            cfg.Mode = "TwoBucket"
+        Else
+            cfg.Mode = "Simple"
+        End If
+
+        ' TODO: Rainfall adjustment and telemetry calibration not yet implemented
+        ' These settings are read but not applied until Sim.bas supports them
+    Else
+        ' Standard: Simple mode, no rainfall, no calibration
+        cfg.Mode = "Simple"
     End If
 
     LoadConfig = cfg
@@ -95,9 +147,10 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
     End If
 End Sub
 
-Public Sub SaveResult(ByRef r As Result)
+Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
+    ' Saves result to appropriate output cell based on runType
     Dim ws As Worksheet, txt As String, rng As Range, i As Long
-    Dim predState As State
+    Dim predState As State, targetName As String
     On Error Resume Next
     Set ws = GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
@@ -109,24 +162,35 @@ Public Sub SaveResult(ByRef r As Result)
         predState = r.FinalState
     End If
 
+    ' Build result text
     If r.TriggerDay = Core.NO_TRIGGER Then
         txt = "No trigger in " & UBound(r.Snaps) & " days"
     Else
         txt = r.TriggerMetric & " day " & r.TriggerDay & " (" & Format$(r.TriggerDate, "dd-mmm") & ")"
     End If
-    SetVal ws, Schema.NAME_STD_TRIGGER, txt
 
-    ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry) - values at trigger day
-    ws.Cells(5, 2).Value = predState.Vol
-    For i = 1 To Core.METRIC_COUNT
-        ws.Cells(5, 2 + i).Value = predState.Chem(i)
-    Next i
+    ' Write to appropriate trigger output cell
+    If UCase$(runType) = "ENHANCED" Then
+        targetName = Schema.NAME_ENH_TRIGGER
+    Else
+        targetName = Schema.NAME_STD_TRIGGER
+    End If
+    SetVal ws, targetName, txt
 
-    Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
-    If Not rng Is Nothing Then
+    ' Only update predicted row and hidden mass for Standard run
+    If UCase$(runType) = "STANDARD" Then
+        ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry) - values at trigger day
+        ws.Cells(5, 2).Value = predState.Vol
         For i = 1 To Core.METRIC_COUNT
-            If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = predState.Hidden(i)
+            ws.Cells(5, 2 + i).Value = predState.Chem(i)
         Next i
+
+        Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
+        If Not rng Is Nothing Then
+            For i = 1 To Core.METRIC_COUNT
+                If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = predState.Hidden(i)
+            Next i
+        End If
     End If
     On Error GoTo 0
 End Sub

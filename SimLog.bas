@@ -1,26 +1,19 @@
 Option Explicit
 ' SimLog: Persistent daily simulation output storage.
-' Dependencies: Core, Schema
+' Dependencies: Core, Schema, Setup (for EnsureSiteLogTable)
 '
-' All runs are stored with RunId prefix for history/recall.
+' All runs are stored per-site with RunId prefix for history/recall.
+' Tables are created on-demand: tblLog_RP1, tblLog_RP2, etc.
 
 ' ==== Write Functions =======================================================
 
-Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String)
-    ' Clears data from StartDate onwards, then appends new snapshots
-    Dim ws As Worksheet, tbl As ListObject
+Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
+    ' Appends new snapshots to site's log table
+    Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, newRow As ListRow
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    Set tbl = GetLogTable(site)
     If tbl Is Nothing Then Exit Sub
-
-    ' Clear existing data from StartDate onwards (keeps historical, replaces future)
-    DeleteFromDate cfg.StartDate
 
     n = UBound(r.Snaps)
     For i = 0 To n
@@ -37,17 +30,12 @@ Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As Strin
     Next i
 End Sub
 
-Public Sub DeleteRun(ByVal runId As String)
-    ' Deletes all rows for a specific RunId (for true rollback)
-    Dim ws As Worksheet, tbl As ListObject
+Public Sub DeleteRun(ByVal runId As String, ByVal site As String)
+    ' Deletes all rows for a specific RunId from site's log table
+    Dim tbl As ListObject
     Dim i As Long
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    Set tbl = GetLogTable(site)
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
@@ -59,35 +47,24 @@ Public Sub DeleteRun(ByVal runId As String)
     Next i
 End Sub
 
-Public Sub ClearAllLogs()
-    ' Clears entire log table (use with caution)
-    Dim ws As Worksheet, tbl As ListObject
+Public Sub ClearSiteLog(ByVal site As String)
+    ' Clears entire log table for site
+    Dim tbl As ListObject
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
-    If Not tbl Is Nothing Then
-        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
-    End If
+    Set tbl = GetLogTable(site)
+    If tbl Is Nothing Then Exit Sub
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
 End Sub
 
 ' ==== Read Functions ========================================================
 
-Public Function GetRunSnapshots(ByVal runId As String) As State()
+Public Function GetRunSnapshots(ByVal runId As String, ByVal site As String) As State()
     ' Returns array of State snapshots for a specific RunId
-    Dim ws As Worksheet, tbl As ListObject
-    Dim snaps() As State, tempSnaps() As State
+    Dim tbl As ListObject
+    Dim snaps() As State
     Dim i As Long, j As Long, cnt As Long
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Function
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    Set tbl = GetLogTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
@@ -114,18 +91,12 @@ Public Function GetRunSnapshots(ByVal runId As String) As State()
     GetRunSnapshots = snaps
 End Function
 
-Public Function GetAllRunIds() As Variant
-    ' Returns array of unique RunIds in the log
-    Dim ws As Worksheet, tbl As ListObject
+Public Function GetAllRunIds(ByVal site As String) As Variant
+    ' Returns array of unique RunIds in site's log
+    Dim tbl As ListObject
     Dim dict As Object, i As Long, runId As String
-    Dim result() As String, cnt As Long
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Function
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    Set tbl = GetLogTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
@@ -143,26 +114,21 @@ Public Function GetAllRunIds() As Variant
     GetAllRunIds = dict.Keys
 End Function
 
-Public Function GetRunCount() As Long
-    ' Returns count of unique runs in the log
+Public Function GetRunCount(ByVal site As String) As Long
+    ' Returns count of unique runs in site's log
     Dim ids As Variant
-    ids = GetAllRunIds()
+    ids = GetAllRunIds(site)
     If IsArray(ids) Then
         GetRunCount = UBound(ids) - LBound(ids) + 1
     End If
 End Function
 
-Public Function GetLatestLogDate() As Date
-    ' Returns the most recent date in tblLogDaily (0 if empty)
-    Dim ws As Worksheet, tbl As ListObject
+Public Function GetLatestLogDate(ByVal site As String) As Date
+    ' Returns the most recent date in site's log (0 if empty)
+    Dim tbl As ListObject
     Dim i As Long, d As Date, maxDate As Date
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Function
-
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    Set tbl = GetLogTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
@@ -174,27 +140,29 @@ Public Function GetLatestLogDate() As Date
     GetLatestLogDate = maxDate
 End Function
 
-' ==== Private Helpers =========================================================
+' ==== Table Access ===========================================================
 
-Private Sub DeleteFromDate(ByVal startDate As Date)
-    ' Deletes all rows where Date >= startDate
-    Dim ws As Worksheet, tbl As ListObject
-    Dim i As Long, d As Date
+Private Function GetLogTable(ByVal site As String) As ListObject
+    ' Returns site's log table, creating it if necessary
+    Dim ws As Worksheet, tblName As String
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
     On Error GoTo 0
-    If ws Is Nothing Then Exit Sub
+    If ws Is Nothing Then Exit Function
 
-    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    tblName = Schema.LogTableName(site)
 
-    ' Delete from bottom up to avoid index issues
-    For i = tbl.ListRows.Count To 1 Step -1
-        d = tbl.DataBodyRange.Cells(i, 2).Value  ' Date column
-        If d >= startDate Then
-            tbl.ListRows(i).Delete
-        End If
-    Next i
-End Sub
+    ' Try to get existing table
+    On Error Resume Next
+    Set GetLogTable = ws.ListObjects(tblName)
+    On Error GoTo 0
+
+    ' Create if doesn't exist
+    If GetLogTable Is Nothing Then
+        Setup.EnsureSiteLogTable site
+        On Error Resume Next
+        Set GetLogTable = ws.ListObjects(tblName)
+        On Error GoTo 0
+    End If
+End Function

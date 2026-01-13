@@ -78,14 +78,29 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
 End Sub
 
 Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
-    ' Handle double-clicks on History sheet
-    Dim ws As Worksheet, tbl As ListObject
-    Dim actionCol As Long, rowIdx As Long, runId As String
+    ' Handle double-clicks on History sheet (per-site tables)
+    Dim ws As Worksheet, tbl As ListObject, lo As ListObject
+    Dim actionCol As Long, rowIdx As Long, runId As String, site As String
 
     Set ws = Target.Worksheet
-    Set tbl = GetTable(ws, Schema.TABLE_HISTORY)
+
+    ' Find which table was clicked (if any)
+    Set tbl = Nothing
+    For Each lo In ws.ListObjects
+        If Left$(lo.Name, Len(Schema.HISTORY_TABLE_PREFIX)) = Schema.HISTORY_TABLE_PREFIX Then
+            If Not lo.DataBodyRange Is Nothing Then
+                If Not Intersect(Target, lo.Range) Is Nothing Then
+                    Set tbl = lo
+                    Exit For
+                End If
+            End If
+        End If
+    Next lo
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    ' Extract site from table name (e.g., "tblHistory_RP1" -> "RP1")
+    site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
 
     actionCol = GetColIndex(tbl, Schema.HISTORY_COL_ACTION)
     If actionCol = 0 Then Exit Sub
@@ -104,7 +119,7 @@ Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
 
         If MsgBox("Rollback to run " & runId & "?" & vbNewLine & _
                   "This will remove all runs after this one.", vbYesNo + vbQuestion, "WQOC") = vbYes Then
-            History.RollbackTo runId
+            History.RollbackTo runId, site
             RefreshHistoryActions tbl
         End If
     End If

@@ -32,8 +32,10 @@ Private Sub ChkSheets()
     ChkSheet Schema.SHEET_INPUT
     ChkSheet Schema.SHEET_CONFIG
     ChkSheet Schema.SHEET_RESULTS
-    ChkSheet Schema.SHEET_RAIN
+    ChkSheet Schema.SHEET_TELEMETRY
     ChkSheet Schema.SHEET_HISTORY
+    ChkSheet Schema.SHEET_LOG
+    ChkSheet Schema.SHEET_CHART
 End Sub
 
 Private Sub ChkSheet(ByVal nm As String)
@@ -61,6 +63,9 @@ Private Sub ChkRanges()
     ChkRange Schema.NAME_NET_OUT
     ChkRange Schema.NAME_ENHANCED_MODE
     ChkRange Schema.NAME_STD_TRIGGER
+    ChkRange Schema.NAME_MIXING_MODEL
+    ChkRange Schema.NAME_RAINFALL_MODE
+    ChkRange Schema.NAME_TELEM_CAL
 End Sub
 
 Private Sub ChkRange(ByVal nm As String)
@@ -76,8 +81,8 @@ Private Sub ChkTables()
     ChkTable Schema.SHEET_CONFIG, Schema.TABLE_CATALOG
     ChkTable Schema.SHEET_CONFIG, Schema.TABLE_TRIGGER
     ChkTable Schema.SHEET_RESULTS, Schema.TABLE_RESULTS
-    ChkTable Schema.SHEET_RAIN, Schema.TABLE_RAIN
-    ChkTable Schema.SHEET_HISTORY, Schema.TABLE_HISTORY
+    ChkTable Schema.SHEET_TELEMETRY, Schema.TABLE_TELEMETRY
+    ' Note: Log and History tables are per-site, created on-demand
 End Sub
 
 Private Sub ChkTable(ByVal sht As String, ByVal tbl As String)
