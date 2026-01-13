@@ -97,9 +97,17 @@ End Sub
 
 Public Sub SaveResult(ByRef r As Result)
     Dim ws As Worksheet, txt As String, rng As Range, i As Long
+    Dim predState As State
     On Error Resume Next
     Set ws = GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
+
+    ' Use state at trigger day for predictions (or final if no trigger)
+    If r.TriggerDay <> Core.NO_TRIGGER Then
+        predState = r.Snaps(r.TriggerDay)
+    Else
+        predState = r.FinalState
+    End If
 
     If r.TriggerDay = Core.NO_TRIGGER Then
         txt = "No trigger in " & UBound(r.Snaps) & " days"
@@ -108,16 +116,16 @@ Public Sub SaveResult(ByRef r As Result)
     End If
     SetVal ws, Schema.NAME_STD_TRIGGER, txt
 
-    ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry)
-    ws.Cells(5, 2).Value = r.FinalState.Vol
+    ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry) - values at trigger day
+    ws.Cells(5, 2).Value = predState.Vol
     For i = 1 To Core.METRIC_COUNT
-        ws.Cells(5, 2 + i).Value = r.FinalState.Chem(i)
+        ws.Cells(5, 2 + i).Value = predState.Chem(i)
     Next i
 
     Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
-            If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = r.FinalState.Hidden(i)
+            If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = predState.Hidden(i)
         Next i
     End If
     On Error GoTo 0

@@ -7,7 +7,7 @@ Option Explicit
 ' ==== Write Functions =======================================================
 
 Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String)
-    ' Appends daily snapshots to tblLogDaily (no longer overwrites)
+    ' Clears data from StartDate onwards, then appends new snapshots
     Dim ws As Worksheet, tbl As ListObject
     Dim i As Long, j As Long, n As Long, newRow As ListRow
 
@@ -18,6 +18,9 @@ Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As Strin
 
     Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
     If tbl Is Nothing Then Exit Sub
+
+    ' Clear existing data from StartDate onwards (keeps historical, replaces future)
+    DeleteFromDate cfg.StartDate
 
     n = UBound(r.Snaps)
     For i = 0 To n
@@ -148,3 +151,50 @@ Public Function GetRunCount() As Long
         GetRunCount = UBound(ids) - LBound(ids) + 1
     End If
 End Function
+
+Public Function GetLatestLogDate() As Date
+    ' Returns the most recent date in tblLogDaily (0 if empty)
+    Dim ws As Worksheet, tbl As ListObject
+    Dim i As Long, d As Date, maxDate As Date
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Function
+
+    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+
+    maxDate = 0
+    For i = 1 To tbl.ListRows.Count
+        d = tbl.DataBodyRange.Cells(i, 2).Value  ' Date column
+        If d > maxDate Then maxDate = d
+    Next i
+    GetLatestLogDate = maxDate
+End Function
+
+' ==== Private Helpers =========================================================
+
+Private Sub DeleteFromDate(ByVal startDate As Date)
+    ' Deletes all rows where Date >= startDate
+    Dim ws As Worksheet, tbl As ListObject
+    Dim i As Long, d As Date
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+
+    Set tbl = ws.ListObjects(Schema.TABLE_LOG_DAILY)
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    ' Delete from bottom up to avoid index issues
+    For i = tbl.ListRows.Count To 1 Step -1
+        d = tbl.DataBodyRange.Cells(i, 2).Value  ' Date column
+        If d >= startDate Then
+            tbl.ListRows(i).Delete
+        End If
+    Next i
+End Sub
