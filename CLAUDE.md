@@ -9,90 +9,73 @@ WQOC (Water Quality Optimisation Calculator) is an Excel/VBA simulation tool for
 ## Testing
 
 ```vba
-Setup.BuildAll           ' Create structure + seed data
-Tests.RunSmokeSuite      ' 10 smoke tests (pure, no I/O)
+Tests.RunSmokeSuite      ' 10 smoke tests
 Scenarios.RunAll         ' 6 regression scenarios
-Validate.Check           ' Structure validation
 WQOC.Run                 ' Full simulation
-WQOC.TestCore            ' Quick test (no I/O)
+WQOC.Rollback            ' Undo last run
 ```
 
 ## Architecture
 
 ```
 WQOC.bas ─┬─ Data.bas ──── Schema.bas
-          ├─ Sim.bas ───── Modes.bas
-          ├─ History.bas
-          └─ Types.bas
+          ├─ Sim.bas ───── Modes.bas ──── Core.bas
+          └─ History.bas
 ```
 
-### Modules (~1,400 lines total)
+### Modules (~1,300 lines)
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| Types.bas | ~56 | State, Config, Result types |
-| Modes.bas | ~82 | StepSimple, StepTwoBucket |
-| Sim.bas | ~43 | Run loop, trigger detection |
-| Data.bas | ~157 | Worksheet I/O |
-| History.bas | ~106 | Audit trail, rollback |
-| WQOC.bas | ~97 | Entry point |
-| Schema.bas | ~180 | Constants |
-| Tests.bas | ~124 | Smoke tests |
-| Setup.bas | ~293 | Workbook scaffolding |
-| Validate.bas | ~92 | Structure checks |
-| Scenarios.bas | ~100 | Regression tests |
-| DictionaryShim.cls | ~265 | Mac compatibility |
+| Core.bas | 55 | Types: State, Config, Result |
+| Modes.bas | 81 | StepSimple, StepTwoBucket |
+| Sim.bas | 42 | Run loop, trigger detection |
+| Data.bas | 156 | Worksheet I/O |
+| History.bas | 105 | Audit trail, rollback |
+| WQOC.bas | 96 | Entry point |
+| Schema.bas | 178 | Constants |
+| Tests.bas | 125 | Smoke tests |
+| Setup.bas | 291 | Workbook scaffolding |
+| Validate.bas | 91 | Structure checks |
+| Scenarios.bas | 98 | Regression tests |
+| DictionaryShim.cls | 265 | Mac compatibility |
 
-### Types
+### Core Types
 
 ```vba
-Type State
+Type State                  ' Reservoir state
     Vol As Double
     Chem(1 To 7) As Double
     Hidden(1 To 7) As Double
     HidVol As Double
 End Type
 
-Type Config
-    Mode As String              ' "Simple" or "TwoBucket"
-    Days As Long
-    StartDate As Date
-    Tau, Inflow, Outflow As Double
-    RainVol, SurfaceFrac As Double
-    InflowChem(1 To 7) As Double
-    TriggerVol As Double
-    TriggerChem(1 To 7) As Double
+Type Config                 ' Simulation config
+    Mode As String          ' "Simple" or "TwoBucket"
+    Days, Tau, Inflow, Outflow As Double
+    TriggerVol, TriggerChem(1 To 7) As Double
 End Type
 
-Type Result
-    TriggerDay As Long          ' -1 = no trigger
-    TriggerDate As Date
+Type Result                 ' Simulation output
+    TriggerDay As Long      ' -1 = no trigger
     TriggerMetric As String
     Snaps() As State
-    FinalState As State
 End Type
 ```
 
 ### Chemistry Metrics
 
-7 metrics (1-7): EC, F_U, F_Mn, SO4, Mg, Ca, TAN
+7 metrics: EC, F_U, F_Mn, SO4, Mg, Ca, TAN
 
 ### Flow
 
 ```
-WQOC.Run()
-    Data.LoadState()
-    Data.LoadConfig()
-    Sim.Run(s, cfg)
-        Modes.Step()        ' Simple or TwoBucket
-        ChkTriggers()
-    Data.SaveResult()
-    History.RecordRun()
+WQOC.Run → Data.Load → Sim.Run → Modes.Step → Data.Save → History.Record
 ```
 
 ## Conventions
 
-**Variables:** `s` = State, `cfg` = Config, `r` = Result, `ws` = Worksheet, `tbl` = ListObject
+**Variables:** `s` = State, `cfg` = Config, `r` = Result, `ws` = Worksheet
 
 **Headers:**
 ```vba
@@ -101,31 +84,8 @@ Option Explicit
 ' Dependencies: X, Y
 ```
 
-**Sections:** `' ==== Name ====`
-
-**Error handling:** `On Error GoTo Cleanup` with Application state restore
-
 ## Extending
 
-- **Add mode:** New `StepX` in Modes.bas, update dispatcher
-- **Add metric:** Update `METRIC_COUNT`, `MetricName()`
-- **Add config:** Update Config type and Data.LoadConfig
-- **Add trigger:** Update Sim.ChkTriggers
-
-## Key Ranges
-
-| Range | Purpose |
-|-------|---------|
-| RR_InitVol | Initial volume |
-| RR_TriggerVol | Volume trigger |
-| Res_Row | Latest chemistry |
-| Limit_Row | Chemistry triggers |
-| RR_HiddenMass | Hidden mass (two-bucket) |
-| Cfg_Tau | Mixing time constant |
-
-## Key Tables
-
-| Table | Purpose |
-|-------|---------|
-| tblIR | Inflow sources |
-| tblHistory | Run history |
+- **Add mode:** New `StepX` in Modes.bas
+- **Add metric:** Update `METRIC_COUNT` in Core.bas
+- **Add trigger:** Update `ChkTriggers` in Sim.bas
