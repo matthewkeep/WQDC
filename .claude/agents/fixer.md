@@ -21,11 +21,13 @@ Troubleshooter. When something breaks, find cause and propose fix.
 
 ## Method
 
+0. **Check _gotchas.md** - known issue? Apply documented fix.
 1. **Reproduce** - what exact error/symptom?
 2. **Isolate** - narrow to specific line/function
 3. **Cause** - why is it failing?
 4. **Fix** - minimal change to resolve
 5. **Verify** - confirm fix works
+6. **Record** - new gotcha? Add to _gotchas.md
 
 ## Output Format
 

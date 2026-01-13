@@ -42,8 +42,11 @@ OK: uncommitted work, multiple tasks, backburner items.
 
 **Sources of truth:**
 - CLAUDE.md → architecture, session context, pending items
+- _gotchas.md → accumulated learnings, VBA quirks, project patterns
 - TodoWrite → active task tracking
 - Git commits → decisions and rationale
+
+**Before fixing/cleaning:** Check _gotchas.md for known issues and patterns.
 
 **During session:**
 - Use TodoWrite for multi-step tasks
