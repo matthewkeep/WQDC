@@ -25,6 +25,14 @@ Setup.Seed               ' Populate test data
 Setup.Clean              ' Remove all WQDC sheets (reset)
 ```
 
+Validation and regression testing:
+```
+Validate.Check           ' Returns True if workbook structure is valid
+Validate.Report          ' Detailed list of missing sheets/ranges/tables
+Scenarios.RunAll         ' Run 6 regression scenarios, verify math
+Scenarios.RunOne 3       ' Run single scenario by index
+```
+
 There is no external build system or CI/CD. Tests are executed manually within Excel.
 
 ## Architecture
