@@ -11,6 +11,7 @@ Tighten code. Preserve behavior.
 3. Kill obvious comments
 4. Compress → colon-joined where readable
 5. Remove dead code
+6. Strip build artifacts (see below)
 
 ## Constraints
 
@@ -18,6 +19,31 @@ Tighten code. Preserve behavior.
 - Never alter simulation math
 - Keep error handling
 - Keep `Option Explicit`
+
+## VBA Build Artifacts (always remove)
+
+```vba
+' REMOVE these - cause compile errors on import:
+Attribute VB_Name = "ModuleName"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = False
+Attribute VB_Exposed = False
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1
+END
+```
+
+First line must be `Option Explicit`, not metadata.
+
+## Language-Specific Artifacts
+
+| Language | Strip on clean |
+|----------|----------------|
+| VBA | `Attribute VB_*`, `VERSION`, class headers |
+| Python | `# -*- coding:` if UTF-8 default |
+| JS | `"use strict"` only if module |
 
 ## Style
 

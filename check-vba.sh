@@ -27,7 +27,18 @@ if [[ -z "$FILES" ]]; then
     exit 0
 fi
 
-# 1. Option Explicit check
+# 1. Build artifacts (cause compile errors)
+echo "Checking for build artifacts..."
+for f in $FILES; do
+    if grep -q "^Attribute VB_" "$f"; then
+        err "$f contains Attribute VB_* lines (remove before import)"
+    fi
+    if grep -q "^VERSION 1.0 CLASS" "$f"; then
+        err "$f contains VERSION header (remove before import)"
+    fi
+done
+
+# 2. Option Explicit check
 echo "Checking Option Explicit..."
 for f in $FILES; do
     if ! grep -q "^Option Explicit" "$f"; then
@@ -35,7 +46,7 @@ for f in $FILES; do
     fi
 done
 
-# 2. Sub/End Sub matching (handle single-line subs)
+# 3. Sub/End Sub matching (handle single-line subs)
 echo "Checking Sub/End Sub balance..."
 for f in $FILES; do
     # Count multi-line subs (Sub on line without End Sub)
@@ -49,7 +60,7 @@ for f in $FILES; do
     fi
 done
 
-# 3. Function/End Function matching
+# 4. Function/End Function matching
 echo "Checking Function/End Function balance..."
 for f in $FILES; do
     FUNCS=$(grep -cE "^(Public |Private )?Function " "$f")
@@ -73,7 +84,7 @@ if $QUICK; then
     fi
 fi
 
-# 4. Public subs without error handling (warn only)
+# 5. Public subs without error handling (warn only)
 echo "Checking error handling in public subs..."
 for f in $FILES; do
     BASE=$(basename "$f")
@@ -89,7 +100,7 @@ for f in $FILES; do
     done < <(grep -n "^Public Sub " "$f" 2>/dev/null)
 done
 
-# 5. Schema constant consistency
+# 6. Schema constant consistency
 echo "Checking Schema constant usage..."
 if [[ -f "Schema.bas" ]]; then
     for f in $FILES; do
@@ -104,7 +115,7 @@ if [[ -f "Schema.bas" ]]; then
     done
 fi
 
-# 6. Duplicate function names across modules
+# 7. Duplicate function names across modules
 echo "Checking for duplicate function names..."
 ALL_FUNCS=$(grep -hE "^(Public |Private )?(Sub|Function) " $FILES 2>/dev/null | \
     sed 's/.*\(Sub\|Function\) \([^(:]*\).*/\2/' | sort)
