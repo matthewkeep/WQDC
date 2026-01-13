@@ -115,7 +115,7 @@ Private Sub GenerateCharts(ByRef r As Result, ByRef cfg As Config)
         Schema.CHART_WIDTH, Schema.CHART_HEIGHT_METRIC)
     With cht.Chart
         .ChartType = xlLine
-        .SetSourceData ws.Range("A1").Resize(n + 2, 1).Address & "," & ws.Range("C1").Resize(n + 2, 1).Address
+        .SetSourceData Union(ws.Range("A1").Resize(n + 2, 1), ws.Range("C1").Resize(n + 2, 1))
         .SeriesCollection(1).Name = "EC"
         .HasTitle = True: .ChartTitle.Text = "EC Over Time"
         .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Day"
