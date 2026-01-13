@@ -40,17 +40,17 @@ End Sub
 ' ==== Type Tests =============================================================
 
 Private Function TstMetricCount() As Boolean
-    TstMetricCount = (Types.METRIC_COUNT = 7)
+    TstMetricCount = (AAATypes.METRIC_COUNT = 7)
 End Function
 
 Private Function TstMetricNames() As Boolean
-    TstMetricNames = (Types.MetricName(1) = "EC") And (Types.MetricName(7) = "TAN")
+    TstMetricNames = (AAATypes.MetricName(1) = "EC") And (AAATypes.MetricName(7) = "TAN")
 End Function
 
 Private Function TstCopyState() As Boolean
     Dim s As State, c As State
     s.Vol = 100: s.Chem(1) = 200: s.Hidden(1) = 5000
-    c = Types.CopyState(s)
+    c = AAATypes.CopyState(s)
     s.Vol = 50
     TstCopyState = (c.Vol = 100) And (c.Chem(1) = 200)
 End Function
@@ -113,7 +113,7 @@ Private Function TstNoTrigger() As Boolean
     s.Vol = 50
     cfg.Mode = "Simple": cfg.Days = 10: cfg.Inflow = 1: cfg.Outflow = 1: cfg.TriggerVol = 200
     r = Sim.Run(s, cfg)
-    TstNoTrigger = (r.TriggerDay = Types.NO_TRIGGER)
+    TstNoTrigger = (r.TriggerDay = AAATypes.NO_TRIGGER)
 End Function
 
 ' ==== Manual Tests ===========================================================
