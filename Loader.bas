@@ -1,6 +1,6 @@
 Option Explicit
 ' Loader: Site selection and data population.
-' Dependencies: Schema, Utils
+' Dependencies: Schema
 
 ' ==== Public Entry Points ===================================================
 
@@ -58,16 +58,16 @@ Private Sub PopulateIRFromCatalog(ByVal site As String)
             ' Add row to IR table
             tblIR.ListRows.Add
             With tblIR.ListRows(tblIR.ListRows.Count).Range
-                .Cells(1, Utils.ColIdx(tblIR, Schema.IR_COL_SOURCE)) = irSite
-                .Cells(1, Utils.ColIdx(tblIR, Schema.IR_COL_FLOW)) = flow
-                .Cells(1, Utils.ColIdx(tblIR, Schema.IR_COL_ACTIVE)) = "Yes"
+                .Cells(1, Schema.ColIdx(tblIR, Schema.IR_COL_SOURCE)) = irSite
+                .Cells(1, Schema.ColIdx(tblIR, Schema.IR_COL_FLOW)) = flow
+                .Cells(1, Schema.ColIdx(tblIR, Schema.IR_COL_ACTIVE)) = "Yes"
 
                 ' Load latest chemistry from Results (if exists)
                 labData = GetLatestLabData(irSite)
                 If Not IsEmpty(labData) Then
-                    .Cells(1, Utils.ColIdx(tblIR, Schema.IR_COL_SAMPLE_DATE)) = labData(0)
+                    .Cells(1, Schema.ColIdx(tblIR, Schema.IR_COL_SAMPLE_DATE)) = labData(0)
                     For i = 0 To UBound(chemNames)
-                        .Cells(1, Utils.ColIdx(tblIR, chemNames(i))) = labData(i + 1)
+                        .Cells(1, Schema.ColIdx(tblIR, chemNames(i))) = labData(i + 1)
                     Next i
                 End If
             End With
@@ -147,7 +147,7 @@ Private Function GetLatestLabData(ByVal site As String) As Variant
     ReDim result(0 To UBound(chemNames) + 1)
     result(0) = latestDate
     For i = 0 To UBound(chemNames)
-        result(i + 1) = Val(latestRow.Range.Cells(1, Utils.ColIdx(tbl, chemNames(i))).Value)
+        result(i + 1) = Val(latestRow.Range.Cells(1, Schema.ColIdx(tbl, chemNames(i))).Value)
     Next i
 
     GetLatestLabData = result

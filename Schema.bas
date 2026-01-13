@@ -175,4 +175,13 @@ Public Function ChemistryCount() As Long
 End Function
 
 
-'' All legacy MetricNames/MetricCount code removed. Use ChemistryNames/ChemistryCount and VOLUME_METRIC_NAME only.
+' ==== Table Helpers ============================================================
+
+Public Function ColIdx(ByVal tbl As ListObject, ByVal colName As String) As Long
+    ' Returns column index (1-based) or 0 if not found
+    Dim col As ListColumn
+    On Error Resume Next
+    Set col = tbl.ListColumns(colName)
+    If Not col Is Nothing Then ColIdx = col.Index
+    On Error GoTo 0
+End Function

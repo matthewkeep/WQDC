@@ -1,6 +1,6 @@
 Option Explicit
 ' Data: Worksheet I/O.
-' Dependencies: Core, Schema, Utils
+' Dependencies: Core, Schema
 
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long
@@ -69,9 +69,9 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
     If tbl.ListRows.Count = 0 Then Exit Sub
 
     chemNames = Schema.ChemistryNames()
-    flowCol = Utils.ColIdx(tbl, Schema.IR_COL_FLOW)
-    activeCol = Utils.ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    chemCol = Utils.ColIdx(tbl, chemNames(0))  ' First chemistry column (e.g., "EC (uS/cm)")
+    flowCol = Schema.ColIdx(tbl, Schema.IR_COL_FLOW)
+    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    chemCol = Schema.ColIdx(tbl, chemNames(0))  ' First chemistry column (e.g., "EC (uS/cm)")
     If flowCol = 0 Then Exit Sub
 
     On Error Resume Next
