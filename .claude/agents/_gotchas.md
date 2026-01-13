@@ -40,3 +40,4 @@ Accumulated learnings. All agents should reference this before making changes.
 - Writing same value to two columns (copy-paste error)
 - Creating helper functions in multiple modules
 - Using Windows-only APIs without checking
+- Creating a Utils module for one function (put in existing dependency instead)

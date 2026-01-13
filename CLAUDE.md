@@ -8,7 +8,7 @@
 - SimLog.bas: Persistent run storage with RunId
 - Loader.bas: Site selection and IR/chemistry population
 - Events.bas: Worksheet change handlers
-- Utils.bas: Shared helpers (ColIdx)
+- ColIdx helper moved to Schema.bas (deleted Utils.bas - one function doesn't justify a module)
 - History Jenga model: RollbackTo, GetRunHistory
 - Charts: Date-based X-axis, horizontal trigger lines
 - Mac fix: DictionaryShim in SimLog (was Scripting.Dictionary)
@@ -42,7 +42,7 @@ Scenarios.RunAll         ' 6 regression scenarios
 ## Architecture
 
 ```
-WQOC.bas ─┬─ Data.bas ──── Schema.bas ──── Utils.bas
+WQOC.bas ─┬─ Data.bas ──── Schema.bas
           ├─ Sim.bas ───── Modes.bas ──── Core.bas
           ├─ History.bas ─ SimLog.bas
           ├─ Loader.bas
@@ -64,7 +64,6 @@ WQOC.bas ─┬─ Data.bas ──── Schema.bas ──── Utils.bas
 | WQOC.bas | Entry point + chart generation |
 | Schema.bas | Constants, sheet/table names |
 | Setup.bas | Scaffolding, buttons, dropdowns |
-| Utils.bas | Shared helpers (ColIdx) |
 | Tests.bas | Smoke tests |
 | Scenarios.bas | Regression tests |
 | Validate.bas | Structure checks |
