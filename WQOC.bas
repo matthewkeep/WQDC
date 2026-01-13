@@ -1,6 +1,6 @@
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
-' Dependencies: Core, Data, Sim, History
+' Dependencies: Core, Data, Sim, History, Schema
 
 Public Sub Run()
     Dim s As State, cfg As Config, r As Result, cm As XlCalculation
@@ -16,6 +16,7 @@ Public Sub Run()
     r = Sim.Run(s, cfg)
     Data.SaveResult r
     History.RecordRun cfg, r
+    GenerateCharts r, cfg
 
     Application.Calculation = cm
     Application.ScreenUpdating = True
@@ -62,6 +63,81 @@ Private Sub ShowRes(ByRef r As Result)
               "Date: " & Format$(r.TriggerDate, "dd-mmm-yyyy")
     End If
     MsgBox msg, vbInformation, "WQOC Result"
+End Sub
+
+' ==== Chart Generation =======================================================
+
+Private Sub GenerateCharts(ByRef r As Result, ByRef cfg As Config)
+    Dim ws As Worksheet, cht As ChartObject, i As Long, n As Long
+    Dim volData() As Double, ecData() As Double, days() As Long
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+
+    n = UBound(r.Snaps)
+    ReDim volData(0 To n): ReDim ecData(0 To n): ReDim days(0 To n)
+
+    For i = 0 To n
+        days(i) = i
+        volData(i) = r.Snaps(i).Vol
+        ecData(i) = r.Snaps(i).Chem(1)
+    Next i
+
+    ' Clear existing charts
+    For Each cht In ws.ChartObjects: cht.Delete: Next cht
+    ws.Cells.Clear
+
+    ' Write data to sheet for chart source
+    ws.Range("A1") = "Day": ws.Range("B1") = "Volume (ML)": ws.Range("C1") = "EC"
+    For i = 0 To n
+        ws.Cells(i + 2, 1) = days(i)
+        ws.Cells(i + 2, 2) = volData(i)
+        ws.Cells(i + 2, 3) = ecData(i)
+    Next i
+
+    ' Volume chart
+    Set cht = ws.ChartObjects.Add(Schema.CHART_LEFT_POS, Schema.CHART_TOP_START, _
+                                   Schema.CHART_WIDTH, Schema.CHART_HEIGHT_VOLUME)
+    With cht.Chart
+        .ChartType = xlLine
+        .SetSourceData ws.Range("A1:B" & n + 2)
+        .HasTitle = True: .ChartTitle.Text = "Volume Over Time"
+        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Day"
+        .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "ML"
+        If r.TriggerDay <> Core.NO_TRIGGER Then AddTriggerLine cht.Chart, r.TriggerDay
+    End With
+
+    ' EC chart
+    Set cht = ws.ChartObjects.Add(Schema.CHART_LEFT_POS, _
+        Schema.CHART_TOP_START + Schema.CHART_HEIGHT_VOLUME + Schema.CHART_SPACING, _
+        Schema.CHART_WIDTH, Schema.CHART_HEIGHT_METRIC)
+    With cht.Chart
+        .ChartType = xlLine
+        .SetSourceData ws.Range("A1").Resize(n + 2, 1).Address & "," & ws.Range("C1").Resize(n + 2, 1).Address
+        .SeriesCollection(1).Name = "EC"
+        .HasTitle = True: .ChartTitle.Text = "EC Over Time"
+        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Day"
+        .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "EC"
+        If r.TriggerDay <> Core.NO_TRIGGER Then AddTriggerLine cht.Chart, r.TriggerDay
+    End With
+End Sub
+
+Private Sub AddTriggerLine(ByRef cht As Chart, ByVal trigDay As Long)
+    ' Add vertical line at trigger day (approximation using a series)
+    Dim s As Series
+    On Error Resume Next
+    Set s = cht.SeriesCollection.NewSeries
+    If Not s Is Nothing Then
+        s.Name = "Trigger"
+        s.XValues = Array(trigDay, trigDay)
+        s.Values = Array(cht.Axes(xlValue).MinimumScale, cht.Axes(xlValue).MaximumScale)
+        s.ChartType = xlLine
+        s.Format.Line.ForeColor.RGB = RGB(192, 0, 0)
+        s.Format.Line.Weight = 2
+    End If
+    On Error GoTo 0
 End Sub
 
 ' ==== Quick Tests ============================================================

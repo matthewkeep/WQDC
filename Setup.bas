@@ -15,6 +15,8 @@ Public Sub Build()
     SetupResults
     SetupRain
     SetupHistory
+    SetupChart
+    SetupControls
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     MsgBox "Structure created.", vbInformation, "Setup"
@@ -73,6 +75,7 @@ Private Sub MakeSheets()
     MakeSheet Schema.SHEET_RESULTS
     MakeSheet Schema.SHEET_RAIN
     MakeSheet Schema.SHEET_HISTORY
+    MakeSheet Schema.SHEET_CHART
 End Sub
 
 Private Sub MakeSheet(ByVal nm As String)
@@ -266,6 +269,65 @@ Private Sub SeedRain()
             tbl.DataBodyRange.Rows(i + 1) = Array(d + i, rain(i))
         Next i
     End If
+End Sub
+
+' ==== Chart Sheet ============================================================
+
+Private Sub SetupChart()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
+    ws.Range("A1") = "Simulation Charts": ws.Range("A1").Font.Bold = True
+    ws.Range("A2") = "Run WQOC.Run to generate charts"
+End Sub
+
+' ==== Controls (Buttons, Dropdowns) =========================================
+
+Private Sub SetupControls()
+    Dim ws As Worksheet, btn As Shape
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_INPUT)
+
+    ' Remove existing buttons
+    On Error Resume Next
+    ws.Shapes("btnRun").Delete
+    ws.Shapes("btnRollback").Delete
+    On Error GoTo 0
+
+    ' Run button
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 400, 5, 80, 28)
+    With btn
+        .Name = "btnRun"
+        .TextFrame2.TextRange.Text = "Run"
+        .TextFrame2.TextRange.Font.Size = 11
+        .TextFrame2.TextRange.Font.Bold = msoTrue
+        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .Fill.ForeColor.RGB = RGB(112, 173, 71)
+        .Line.Visible = msoFalse
+        .OnAction = "WQOC.Run"
+    End With
+
+    ' Rollback button
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 490, 5, 80, 28)
+    With btn
+        .Name = "btnRollback"
+        .TextFrame2.TextRange.Text = "Rollback"
+        .TextFrame2.TextRange.Font.Size = 11
+        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .Fill.ForeColor.RGB = RGB(191, 191, 191)
+        .Line.Visible = msoFalse
+        .OnAction = "WQOC.Rollback"
+    End With
+
+    ' Rain mode dropdown validation
+    With ws.Range(Schema.NAME_RAIN_MODE).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:=Schema.RAIN_MODE_LIST
+    End With
+
+    ' Enhanced mode dropdown validation
+    With ws.Range(Schema.NAME_ENHANCED_MODE).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:="On,Off"
+    End With
 End Sub
 
 ' ==== Helpers ================================================================
