@@ -12,8 +12,8 @@ COO - coordinate the right agent at the right time. Don't do the work, dispatch 
 
 | Agent | When to deploy |
 |-------|----------------|
-| **code-cleaner** | After feature complete, before commit |
-| **code-steward** | After refactor, check integrity |
+| **cleaner** | After feature complete, before commit |
+| **steward** | After refactor, check integrity |
 | **scout** | New codebase, "where is X?", orientation |
 | **fixer** | Test failure, runtime error, debugging |
 | **navigator** | User asks "what next?" or at decision points |
@@ -24,8 +24,8 @@ COO - coordinate the right agent at the right time. Don't do the work, dispatch 
 ```
 1. Navigator sets direction
 2. [Human/Claude implements]
-3. code-cleaner tightens
-4. code-steward verifies integrity
+3. cleaner tightens
+4. steward verifies integrity
 5. Commit
 ```
 
@@ -33,24 +33,24 @@ COO - coordinate the right agent at the right time. Don't do the work, dispatch 
 ```
 1. Identify issue
 2. [Fix]
-3. code-steward checks no regressions
+3. steward checks no regressions
 4. Commit
 ```
 
 ### Refactor
 ```
-1. code-steward baseline (note current behavior)
+1. steward baseline (note current behavior)
 2. [Refactor]
-3. code-cleaner tightens
-4. code-steward verifies same behavior
+3. cleaner tightens
+4. steward verifies same behavior
 5. Commit
 ```
 
 ## Escalation
 
 If agent reports issue:
-- **code-cleaner** finds verbose code → clean it, don't ask
-- **code-steward** finds broken dependency → flag to user
+- **cleaner** finds verbose code → clean it, don't ask
+- **steward** finds broken dependency → flag to user
 - **navigator** unclear on direction → ask ONE question
 
 ## Anti-patterns

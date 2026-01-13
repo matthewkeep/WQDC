@@ -1,4 +1,4 @@
-# Code Cleaner Agent
+# Cleaner Agent
 
 *Inherits: _foundation.md*
 

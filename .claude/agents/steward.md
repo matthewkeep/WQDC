@@ -1,4 +1,4 @@
-# Code Steward Agent
+# Steward Agent
 
 *Inherits: _foundation.md*
 
@@ -29,6 +29,6 @@ Don't run proactively. Don't suggest improvements.
 ## What's NOT a break
 
 - Missing comments
-- Verbose variable names (code-cleaner's job)
+- Verbose variable names (cleaner's job)
 - Suboptimal patterns that work
 - Style inconsistencies
