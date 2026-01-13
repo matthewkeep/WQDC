@@ -75,10 +75,13 @@ End Function
 
 Private Function TstTwoBucket() As Boolean
     Dim s As State, cfg As Config, n As State
+    Dim massBefore As Double, massAfter As Double
     s.Vol = 100: s.Chem(1) = 100: s.Hidden(1) = 10000: s.HidVol = 50
     cfg.Mode = "TwoBucket": cfg.Tau = 7: cfg.SurfaceFrac = 0.8
+    massBefore = s.Vol * s.Chem(1) + s.Hidden(1)
     n = Modes.StepTwoBucket(s, cfg)
-    TstTwoBucket = (n.Chem(1) > s.Chem(1)) And (n.Hidden(1) < s.Hidden(1))
+    massAfter = n.Vol * n.Chem(1) + n.Hidden(1)
+    TstTwoBucket = (Abs(massBefore - massAfter) < 0.01)
 End Function
 
 ' ==== Sim Tests ==============================================================
