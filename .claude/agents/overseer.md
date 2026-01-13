@@ -12,6 +12,8 @@ COO - coordinate the right agent at the right time. Don't do the work, dispatch 
 |-------|----------------|
 | **code-cleaner** | After feature complete, before commit |
 | **code-steward** | After refactor, check integrity |
+| **scout** | New codebase, "where is X?", orientation |
+| **fixer** | Test failure, runtime error, debugging |
 | **navigator** | User asks "what next?" or at decision points |
 
 ## Workflow Patterns
