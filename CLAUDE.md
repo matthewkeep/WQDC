@@ -1,27 +1,6 @@
 # CLAUDE.md
 
-## Session Context
-
-**Last updated:** 2026-01-14
-
-**Recent changes:**
-- SimLog.bas: Persistent run storage with RunId
-- Loader.bas: Site selection and IR/chemistry population
-- Events.bas: Worksheet change handlers
-- ColIdx helper moved to Schema.bas (deleted Utils.bas - one function doesn't justify a module)
-- History Jenga model: RollbackTo, GetRunHistory
-- Charts: Date-based X-axis, horizontal trigger lines
-- Mac fix: DictionaryShim in SimLog (was Scripting.Dictionary)
-
-**Paused/Pending:**
-- Test site selection workflow in Excel
-
-**Key decisions:**
-- Core.bas (not Types/AAATypes) for VBA compile order
-- Mass conservation test for TwoBucket (not gradient test)
-- History/SimLog share RunId for rollback coordination
-
----
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -33,8 +12,9 @@ WQOC (Water Quality Optimisation Calculator) is an Excel/VBA simulation tool for
 
 ```vba
 Setup.BuildAll           ' Create sheets, buttons, seed data
-WQOC.Run                 ' Run simulation (or click Run button)
-WQOC.Rollback            ' Undo last run
+Setup.Initialize         ' Create per-site tables/columns from Catalog
+WQOC.Run                 ' Run simulation (Standard + Enhanced if enabled)
+WQOC.Rollback            ' Undo last run for current site
 Tests.RunSmokeSuite      ' 10 smoke tests
 Scenarios.RunAll         ' 6 regression scenarios
 ```
@@ -42,9 +22,10 @@ Scenarios.RunAll         ' 6 regression scenarios
 ## Architecture
 
 ```
-WQOC.bas ─┬─ Data.bas ──── Schema.bas
-          ├─ Sim.bas ───── Modes.bas ──── Core.bas
-          ├─ History.bas ─ SimLog.bas
+WQOC.bas ─┬─ Data.bas ──────── Schema.bas
+          ├─ Telemetry.bas ─── Schema.bas
+          ├─ Sim.bas ───────── Modes.bas ── Core.bas
+          ├─ History.bas ───── SimLog.bas
           ├─ Loader.bas
           └─ (Charts)
 ```
@@ -56,7 +37,8 @@ WQOC.bas ─┬─ Data.bas ──── Schema.bas
 | Core.bas | Types: State, Config, Result |
 | Modes.bas | StepSimple, StepTwoBucket |
 | Sim.bas | Run loop, trigger detection |
-| Data.bas | Worksheet I/O |
+| Data.bas | Worksheet I/O (Input/Config/Results) |
+| Telemetry.bas | Telemetry data access (Rain, EC, Vol) |
 | History.bas | Audit trail, Jenga rollback |
 | SimLog.bas | Persistent daily snapshots |
 | Loader.bas | Site selection, IR/chemistry population |
@@ -95,12 +77,27 @@ WQOC.Run → Data.Load → Sim.Run → Modes.Step → Data.Save → History.Reco
 - **Add metric:** Update `METRIC_COUNT` in Core.bas
 - **Add trigger:** Update `ChkTriggers` in Sim.bas
 
-## Agent System
+## Working Style
 
-See `.claude/agents/` for Claude Code agents:
-- **navigator** (`next`) - direction
-- **overseer** (`see/plan/repo`) - orchestration
-- **cleaner** (`clean`) - code hygiene
-- **steward** (`verify`) - integrity checks
-- **scout** (`find`) - reconnaissance
-- **fixer** (`fix/error`) - debugging
+- **Smallest effective action** - do less, not more
+- **Fix, don't improve** - solve the problem, stop there
+- **Silence is approval** - don't ask, just do (within scope)
+- Bullets over paragraphs, code over explanation
+
+## Gotchas
+
+See `.claude/agents/_gotchas.md` for full list. Key ones:
+
+| Issue | Fix |
+|-------|-----|
+| `Log` is reserved | Use `SimLog`, `AuditLog` |
+| Mac compatibility | Use `DictionaryShim` not `Scripting.Dictionary` |
+| Table access | Check `tbl.DataBodyRange Is Nothing` before access |
+| History/SimLog | Share RunId for rollback coordination |
+
+## Per-Site Architecture
+
+- Log/History tables per site: `tblLog_RP1`, `tblHistory_RP1`
+- Telemetry columns per site: `EC (RP1)`, `Vol (RP1)` (Rain is global)
+- RunId format: `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
+- Tables created on-demand (first run) or via `Setup.Initialize`
