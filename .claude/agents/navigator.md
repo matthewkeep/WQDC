@@ -4,6 +4,14 @@
 
 Guide next steps. Set direction.
 
+## Triggers
+
+Invoke when user says:
+- "next"
+- "what now"
+- "what's next"
+- "navigator"
+
 ## Principles
 
 1. **Suggest the smallest effective action** - Not the comprehensive one
