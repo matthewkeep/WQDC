@@ -39,6 +39,13 @@ If switching tasks mid-work:
 - Multiple tasks in flight
 - Backburner items (just track them)
 
+## Commit Style
+
+- First line: what changed (imperative, <50 chars)
+- Body: why, if non-obvious
+- Small, reviewable chunks
+- Don't batch unrelated changes
+
 ## Universal Anti-patterns
 
 - "While we're here, let's also..."
