@@ -1,5 +1,5 @@
 Option Explicit
-' AAATypes: Core type definitions (AAA prefix ensures first compile).
+' _Types: Core type definitions (underscore ensures first compile).
 ' Dependencies: None
 
 Public Const METRIC_COUNT As Long = 7
