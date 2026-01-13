@@ -4,6 +4,14 @@
 
 Tighten code. Preserve behavior.
 
+## Triggers
+
+Invoke when user says:
+- "clean"
+- "tighten"
+- "tidy"
+- "trim"
+
 ## Actions
 
 1. Trim headers → 2 lines max

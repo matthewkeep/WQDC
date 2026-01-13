@@ -4,16 +4,20 @@
 
 Diagnose and resolve failures fast.
 
+## Triggers
+
+Invoke when user says:
+- "fix"
+- "broken"
+- "error"
+- "debug"
+- "not working"
+
+Also activates for: test failure, runtime error, unexpected behavior.
+
 ## Role
 
 Troubleshooter. When something breaks, find cause and propose fix.
-
-## Triggers
-
-- Test failure
-- Runtime error
-- "It's not working"
-- Unexpected behavior
 
 ## Method
 

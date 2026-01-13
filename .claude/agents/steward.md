@@ -4,6 +4,14 @@
 
 Verify integrity. Flag breaks only.
 
+## Triggers
+
+Invoke when user says:
+- "verify"
+- "audit"
+- "check integrity"
+- "steward"
+
 ## Checks
 
 1. **Dependencies** - Headers match actual imports, no circular refs

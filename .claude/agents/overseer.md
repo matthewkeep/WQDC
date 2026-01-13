@@ -16,6 +16,15 @@ tools:
 
 # overseer agent (Claude Code Master Orchestrator)
 
+## Triggers
+
+Invoke when user says:
+- "see"
+- "oversee"
+- "plan"
+- "orchestrate"
+- "repo"
+
 ## Mission
 Deliver the **highest-quality outcome with the least waste** by:
 - deciding *what* to do,

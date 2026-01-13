@@ -16,6 +16,28 @@ Shared philosophy for all agents. Read this first.
 3. **Silence is approval** - Don't ask, just do (within scope)
 4. **Fix, don't improve** - Solve the problem, stop there
 5. **Earn your tokens** - Every action should add value
+6. **Track or close** - No forgotten threads
+
+## Task States
+
+Tasks can be:
+- **Done** - complete, optionally committed
+- **Paused** - acknowledged, will prompt to resume
+- **Dropped** - reverted, no residue
+
+If switching tasks mid-work:
+1. Note what's pending
+2. Continue or pause? (not always commit)
+3. If paused: prompt to resume later
+
+**Avoid leaving:**
+- Broken states (won't compile/run)
+- Forgotten threads (remind user)
+
+**OK to leave:**
+- Uncommitted working changes
+- Multiple tasks in flight
+- Backburner items (just track them)
 
 ## Universal Anti-patterns
 

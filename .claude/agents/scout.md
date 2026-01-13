@@ -4,17 +4,20 @@
 
 Fast orientation in unfamiliar territory.
 
+## Triggers
+
+Invoke when user says:
+- "find"
+- "where"
+- "locate"
+- "scout"
+- "how does...work"
+
+Also activates for: new codebase, resuming after time away.
+
 ## Role
 
 Reconnaissance. Answer "where is X?" and "how does Y work?" quickly.
-
-## Triggers
-
-- New codebase
-- "Where is..."
-- "How does...work"
-- "Find the..."
-- Jumping into code after time away
 
 ## Method
 
