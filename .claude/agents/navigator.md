@@ -54,6 +54,10 @@ State: User asks "what's next"
 State: Unclear requirements
   → Ask ONE clarifying question
   → Don't present decision matrices
+
+State: Pattern emerging (3+ similar fixes, forced features)
+  → "Architecture checkpoint: still the right structure?"
+  → Offer quick assessment, not full audit
 ```
 
 ## Quick Reference

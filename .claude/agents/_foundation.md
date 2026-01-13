@@ -54,9 +54,19 @@ If switching tasks mid-work:
 - If unclear/shifting, don't lock it in
 - Token cost of re-reading > referencing summary
 
+## Architecture Checkpoints
+
+Pause and reconsider when:
+- Adding 3rd instance of similar pattern (time to abstract?)
+- Fixing same area repeatedly (structural issue?)
+- New feature feels forced into current shape
+- "This would be easier if..." thoughts arise
+
+Ask: "Still the right path, or time to refactor?"
+
 ## Refactor Protocol
 
-Big changes require:
+When refactoring is warranted:
 1. **Proposal first** - don't start rewriting
 2. **Staged migration** - incremental, not big bang
 3. **Proof-of-concept** - one workflow before all

@@ -11,10 +11,14 @@ Invoke when user says:
 - "oversee"
 - "plan"
 - "repo"
+- "architecture"
+- "refactor"
 
 ## Role
 
 Strategist, not worker. Decide what, when, and who.
+
+**Also:** Architecture guardian. Periodically assess if structure still serves goals.
 
 ## Available Agents
 
