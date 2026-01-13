@@ -17,6 +17,7 @@ Shared philosophy for all agents. Read this first.
 4. **Fix, don't improve** - Solve the problem, stop there
 5. **Earn your tokens** - Every action should add value
 6. **Track or close** - No forgotten threads
+7. **No regression** - Verify nothing lost on updates
 
 ## Task States
 
@@ -45,6 +46,29 @@ If switching tasks mid-work:
 - Body: why, if non-obvious
 - Small, reviewable chunks
 - Don't batch unrelated changes
+
+## Architecture Memory
+
+- Summarize architecture once, reference forward
+- Don't re-analyze same ground repeatedly
+- If unclear/shifting, don't lock it in
+- Token cost of re-reading > referencing summary
+
+## Refactor Protocol
+
+Big changes require:
+1. **Proposal first** - don't start rewriting
+2. **Staged migration** - incremental, not big bang
+3. **Proof-of-concept** - one workflow before all
+4. **Tests gate** - weak tests = proposal only
+
+## Update Protocol
+
+Before replacing/updating files:
+1. Diff old vs new
+2. List what's removed
+3. Verify removed items covered elsewhere
+4. If not: add to new or flag to user
 
 ## Universal Anti-patterns
 
