@@ -16,6 +16,7 @@ Public Sub Build()
     SetupRain
     SetupHistory
     SetupChart
+    SetupLog
     SetupControls
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
@@ -76,6 +77,7 @@ Private Sub MakeSheets()
     MakeSheet Schema.SHEET_RAIN
     MakeSheet Schema.SHEET_HISTORY
     MakeSheet Schema.SHEET_CHART
+    MakeSheet Schema.SHEET_LOG
 End Sub
 
 Private Sub MakeSheet(ByVal nm As String)
@@ -280,6 +282,26 @@ Private Sub SetupChart()
     ws.Range("A2") = "Run WQOC.Run to generate charts"
 End Sub
 
+' ==== Log Sheet =============================================================
+
+Private Sub SetupLog()
+    Dim ws As Worksheet, chem As Variant, n As Long, h() As String, i As Long
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
+
+    ws.Range("A1") = "Simulation Log (persistent - all runs stored)"
+    ws.Range("A1").Font.Bold = True
+
+    ' Log table header: RunId, Date, Day, Volume, EC, F_U, F_Mn, SO4, Mg, Ca, TAN
+    ReDim h(1 To n + 4)
+    h(1) = "RunId"
+    h(2) = "Date"
+    h(3) = "Day"
+    h(4) = Schema.VOLUME_METRIC_NAME
+    For i = 1 To n: h(4 + i) = chem(i - 1): Next i
+    MakeTbl ws, ws.Range("A3"), Schema.TABLE_LOG_DAILY, h
+End Sub
+
 ' ==== Controls (Buttons, Dropdowns) =========================================
 
 Private Sub SetupControls()
@@ -290,7 +312,21 @@ Private Sub SetupControls()
     On Error Resume Next
     ws.Shapes("btnRun").Delete
     ws.Shapes("btnRollback").Delete
+    ws.Shapes("btnRefresh").Delete
     On Error GoTo 0
+
+    ' Refresh button (loads site data)
+    Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 310, 5, 80, 28)
+    With btn
+        .Name = "btnRefresh"
+        .TextFrame2.TextRange.Text = "Load Site"
+        .TextFrame2.TextRange.Font.Size = 10
+        .TextFrame2.TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .Fill.ForeColor.RGB = RGB(68, 114, 196)
+        .TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+        .Line.Visible = msoFalse
+        .OnAction = "Loader.RefreshSiteData"
+    End With
 
     ' Run button
     Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, 400, 5, 80, 28)
@@ -327,6 +363,12 @@ Private Sub SetupControls()
     With ws.Range(Schema.NAME_ENHANCED_MODE).Validation
         .Delete
         .Add Type:=xlValidateList, Formula1:="On,Off"
+    End With
+
+    ' Site dropdown validation (from tblCatalog RR column)
+    With ws.Range(Schema.NAME_SITE).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & Schema.TABLE_CATALOG & "[RR]"")"
     End With
 End Sub
 

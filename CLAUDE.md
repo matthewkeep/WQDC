@@ -2,19 +2,24 @@
 
 ## Session Context
 
-**Last updated:** 2026-01-13
+**Last updated:** 2026-01-14
 
 **Recent changes:**
-- Charts + buttons added (Setup.bas, WQOC.bas)
-- Agent system complete (6 agents + foundation)
-- All tests passing (10/10 smoke, 6/6 scenarios)
+- SimLog.bas: Persistent run storage with RunId
+- Loader.bas: Site selection and IR/chemistry population
+- Events.bas: Worksheet change handlers
+- Utils.bas: Shared helpers (ColIdx)
+- History Jenga model: RollbackTo, GetRunHistory
+- Charts: Date-based X-axis, horizontal trigger lines
+- Mac fix: DictionaryShim in SimLog (was Scripting.Dictionary)
 
 **Paused/Pending:**
-- Test new Excel features (buttons, charts)
+- Test site selection workflow in Excel
 
 **Key decisions:**
 - Core.bas (not Types/AAATypes) for VBA compile order
 - Mass conservation test for TwoBucket (not gradient test)
+- History/SimLog share RunId for rollback coordination
 
 ---
 
@@ -37,13 +42,14 @@ Scenarios.RunAll         ' 6 regression scenarios
 ## Architecture
 
 ```
-WQOC.bas ─┬─ Data.bas ──── Schema.bas
+WQOC.bas ─┬─ Data.bas ──── Schema.bas ──── Utils.bas
           ├─ Sim.bas ───── Modes.bas ──── Core.bas
-          ├─ History.bas
+          ├─ History.bas ─ SimLog.bas
+          ├─ Loader.bas
           └─ (Charts)
 ```
 
-### Modules (~1,500 lines)
+### Modules
 
 | Module | Purpose |
 |--------|---------|
@@ -51,10 +57,14 @@ WQOC.bas ─┬─ Data.bas ──── Schema.bas
 | Modes.bas | StepSimple, StepTwoBucket |
 | Sim.bas | Run loop, trigger detection |
 | Data.bas | Worksheet I/O |
-| History.bas | Audit trail, rollback |
+| History.bas | Audit trail, Jenga rollback |
+| SimLog.bas | Persistent daily snapshots |
+| Loader.bas | Site selection, IR/chemistry population |
+| Events.bas | Worksheet change handlers |
 | WQOC.bas | Entry point + chart generation |
 | Schema.bas | Constants, sheet/table names |
 | Setup.bas | Scaffolding, buttons, dropdowns |
+| Utils.bas | Shared helpers (ColIdx) |
 | Tests.bas | Smoke tests |
 | Scenarios.bas | Regression tests |
 | Validate.bas | Structure checks |

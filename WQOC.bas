@@ -1,9 +1,10 @@
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
-' Dependencies: Core, Data, Sim, History, Schema
+' Dependencies: Core, Data, Sim, History, SimLog, Schema
 
 Public Sub Run()
     Dim s As State, cfg As Config, r As Result, cm As XlCalculation
+    Dim runId As String
     On Error GoTo Cleanup
 
     cm = Application.Calculation
@@ -15,7 +16,9 @@ Public Sub Run()
     cfg = Data.LoadConfig()
     r = Sim.Run(s, cfg)
     Data.SaveResult r
-    History.RecordRun cfg, r
+    runId = Format$(Now, "yyyymmdd_hhmmss")
+    History.RecordRun cfg, r, runId
+    SimLog.WriteLog r, cfg, runId
     GenerateCharts r, cfg
 
     Application.Calculation = cm
@@ -69,7 +72,6 @@ End Sub
 
 Private Sub GenerateCharts(ByRef r As Result, ByRef cfg As Config)
     Dim ws As Worksheet, cht As ChartObject, i As Long, n As Long
-    Dim volData() As Double, ecData() As Double, days() As Long
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
@@ -77,67 +79,81 @@ Private Sub GenerateCharts(ByRef r As Result, ByRef cfg As Config)
     If ws Is Nothing Then Exit Sub
 
     n = UBound(r.Snaps)
-    ReDim volData(0 To n): ReDim ecData(0 To n): ReDim days(0 To n)
 
-    For i = 0 To n
-        days(i) = i
-        volData(i) = r.Snaps(i).Vol
-        ecData(i) = r.Snaps(i).Chem(1)
-    Next i
-
-    ' Clear existing charts
+    ' Clear existing charts and data
     For Each cht In ws.ChartObjects: cht.Delete: Next cht
     ws.Cells.Clear
 
-    ' Write data to sheet for chart source
-    ws.Range("A1") = "Day": ws.Range("B1") = "Volume (ML)": ws.Range("C1") = "EC"
+    ' Write data with dates and trigger thresholds
+    ws.Range("A1") = "Date"
+    ws.Range("B1") = "Volume (ML)"
+    ws.Range("C1") = "Vol Trigger"
+    ws.Range("D1") = "EC"
+    ws.Range("E1") = "EC Trigger"
+
     For i = 0 To n
-        ws.Cells(i + 2, 1) = days(i)
-        ws.Cells(i + 2, 2) = volData(i)
-        ws.Cells(i + 2, 3) = ecData(i)
+        ws.Cells(i + 2, 1) = cfg.StartDate + i           ' Actual date
+        ws.Cells(i + 2, 2) = r.Snaps(i).Vol             ' Volume
+        ws.Cells(i + 2, 3) = cfg.TriggerVol             ' Volume trigger (horizontal line)
+        ws.Cells(i + 2, 4) = r.Snaps(i).Chem(1)         ' EC
+        ws.Cells(i + 2, 5) = cfg.TriggerChem(1)         ' EC trigger (horizontal line)
     Next i
 
-    ' Volume chart
+    ' Format date column
+    ws.Range("A2:A" & n + 2).NumberFormat = "dd-mmm-yy"
+
+    ' Volume chart with trigger threshold
     Set cht = ws.ChartObjects.Add(Schema.CHART_LEFT_POS, Schema.CHART_TOP_START, _
                                    Schema.CHART_WIDTH, Schema.CHART_HEIGHT_VOLUME)
     With cht.Chart
         .ChartType = xlLine
-        .SetSourceData ws.Range("A1:B" & n + 2)
+        ' Volume series
+        .SetSourceData ws.Range("B1:B" & n + 2)
+        .SeriesCollection(1).XValues = ws.Range("A2:A" & n + 2)
+        .SeriesCollection(1).Name = "Volume"
+        ' Trigger threshold series
+        If cfg.TriggerVol > 0 Then
+            With .SeriesCollection.NewSeries
+                .Name = "Trigger"
+                .XValues = ws.Range("A2:A" & n + 2)
+                .Values = ws.Range("C2:C" & n + 2)
+                .Format.Line.ForeColor.RGB = RGB(192, 0, 0)
+                .Format.Line.DashStyle = msoLineDash
+                .Format.Line.Weight = 1.5
+            End With
+        End If
         .HasTitle = True: .ChartTitle.Text = "Volume Over Time"
-        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Day"
+        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
+        .Axes(xlCategory).TickLabels.NumberFormat = "dd-mmm"
         .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "ML"
-        If r.TriggerDay <> Core.NO_TRIGGER Then AddTriggerLine cht.Chart, r.TriggerDay
     End With
 
-    ' EC chart
+    ' EC chart with trigger threshold
     Set cht = ws.ChartObjects.Add(Schema.CHART_LEFT_POS, _
         Schema.CHART_TOP_START + Schema.CHART_HEIGHT_VOLUME + Schema.CHART_SPACING, _
         Schema.CHART_WIDTH, Schema.CHART_HEIGHT_METRIC)
     With cht.Chart
         .ChartType = xlLine
-        .SetSourceData Union(ws.Range("A1").Resize(n + 2, 1), ws.Range("C1").Resize(n + 2, 1))
+        ' EC series
+        .SetSourceData ws.Range("D1:D" & n + 2)
+        .SeriesCollection(1).XValues = ws.Range("A2:A" & n + 2)
         .SeriesCollection(1).Name = "EC"
+        ' Trigger threshold series
+        If cfg.TriggerChem(1) > 0 Then
+            With .SeriesCollection.NewSeries
+                .Name = "Trigger"
+                .XValues = ws.Range("A2:A" & n + 2)
+                .Values = ws.Range("E2:E" & n + 2)
+                .Format.Line.ForeColor.RGB = RGB(192, 0, 0)
+                .Format.Line.DashStyle = msoLineDash
+                .Format.Line.Weight = 1.5
+            End With
+        End If
         .HasTitle = True: .ChartTitle.Text = "EC Over Time"
-        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Day"
+        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
+        .Axes(xlCategory).TickLabels.NumberFormat = "dd-mmm"
         .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "EC"
-        If r.TriggerDay <> Core.NO_TRIGGER Then AddTriggerLine cht.Chart, r.TriggerDay
     End With
-End Sub
-
-Private Sub AddTriggerLine(ByRef cht As Chart, ByVal trigDay As Long)
-    ' Add vertical line at trigger day (approximation using a series)
-    Dim s As Series
-    On Error Resume Next
-    Set s = cht.SeriesCollection.NewSeries
-    If Not s Is Nothing Then
-        s.Name = "Trigger"
-        s.XValues = Array(trigDay, trigDay)
-        s.Values = Array(cht.Axes(xlValue).MinimumScale, cht.Axes(xlValue).MaximumScale)
-        s.ChartType = xlLine
-        s.Format.Line.ForeColor.RGB = RGB(192, 0, 0)
-        s.Format.Line.Weight = 2
-    End If
-    On Error GoTo 0
 End Sub
 
 ' ==== Quick Tests ============================================================

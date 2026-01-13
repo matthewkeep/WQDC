@@ -1,6 +1,6 @@
 Option Explicit
 ' Data: Worksheet I/O.
-' Dependencies: Core, Schema
+' Dependencies: Core, Schema, Utils
 
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long
@@ -61,15 +61,17 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
     Dim tbl As ListObject, row As ListRow
     Dim flowCol As Long, activeCol As Long, chemCol As Long
     Dim flow As Double, i As Long
+    Dim chemNames As Variant
     On Error Resume Next
     Set tbl = ws.ListObjects(Schema.TABLE_IR)
     On Error GoTo 0
     If tbl Is Nothing Then Exit Sub
     If tbl.ListRows.Count = 0 Then Exit Sub
 
-    flowCol = ColIdx(tbl, Schema.IR_COL_FLOW)
-    activeCol = ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    chemCol = ColIdx(tbl, Core.MetricName(1))
+    chemNames = Schema.ChemistryNames()
+    flowCol = Utils.ColIdx(tbl, Schema.IR_COL_FLOW)
+    activeCol = Utils.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    chemCol = Utils.ColIdx(tbl, chemNames(0))  ' First chemistry column (e.g., "EC (uS/cm)")
     If flowCol = 0 Then Exit Sub
 
     On Error Resume Next
@@ -106,6 +108,12 @@ Public Sub SaveResult(ByRef r As Result)
     End If
     SetVal ws, Schema.NAME_STD_TRIGGER, txt
 
+    ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry)
+    ws.Cells(5, 2).Value = r.FinalState.Vol
+    For i = 1 To Core.METRIC_COUNT
+        ws.Cells(5, 2 + i).Value = r.FinalState.Chem(i)
+    Next i
+
     Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
@@ -141,13 +149,6 @@ Private Sub SetVal(ByVal ws As Worksheet, ByVal nm As String, ByVal v As Variant
     If Not rng Is Nothing Then rng.Value = v
 End Sub
 
-Private Function ColIdx(ByVal tbl As ListObject, ByVal nm As String) As Long
-    Dim col As ListColumn
-    On Error Resume Next
-    Set col = tbl.ListColumns(nm)
-    If Not col Is Nothing Then ColIdx = col.Index
-    On Error GoTo 0
-End Function
 
 Private Function IsActive(ByVal v As Variant) As Boolean
     Dim s As String
