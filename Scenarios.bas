@@ -1,6 +1,6 @@
 Option Explicit
 ' Scenarios: Regression tests for simulation math.
-' Dependencies: Types, Sim, Modes
+' Dependencies: Core, Sim, Modes
 
 Private Type Scen
     Nm As String

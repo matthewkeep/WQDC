@@ -1,6 +1,6 @@
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
-' Dependencies: Types, Data, Sim, History
+' Dependencies: Core, Data, Sim, History
 
 Public Sub Run()
     Dim s As State, cfg As Config, r As Result, cm As XlCalculation

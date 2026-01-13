@@ -1,6 +1,6 @@
 Option Explicit
 ' Data: Worksheet I/O.
-' Dependencies: Types, Schema
+' Dependencies: Core, Schema
 
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long

@@ -1,6 +1,6 @@
 Option Explicit
 ' Tests: Smoke tests for core modules.
-' Dependencies: Types, Modes, Sim
+' Dependencies: Core, Modes, Sim
 
 Public Sub RunSmokeSuite()
     Dim p As Long, f As Long

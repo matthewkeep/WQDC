@@ -1,6 +1,6 @@
 Option Explicit
 ' Modes: Simulation step functions.
-' Dependencies: Types
+' Dependencies: Core
 
 Public Function Step(ByRef s As State, ByRef cfg As Config) As State
     Select Case UCase$(cfg.Mode)

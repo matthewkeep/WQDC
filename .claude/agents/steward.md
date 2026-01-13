@@ -15,9 +15,10 @@ Invoke when user says:
 ## Checks
 
 1. **Dependencies** - Headers match actual imports, no circular refs
-2. **Types** - Explicit bounds `(1 To 7)`, ByRef for structs
-3. **Schema sync** - Constants match Setup.bas and Validate.bas
-4. **Core purity** - Types/Modes/Sim have no Schema/Data imports
+2. **Stale refs** - Comments/code reference renamed modules (Types→Core)
+3. **Types** - Explicit bounds `(1 To 7)`, ByRef for structs
+4. **Schema sync** - Constants match Setup.bas and Validate.bas
+5. **Core purity** - Core/Modes/Sim have no Schema/Data imports
 
 ## Output
 

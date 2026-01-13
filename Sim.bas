@@ -1,6 +1,6 @@
 Option Explicit
 ' Sim: Core simulation loop.
-' Dependencies: Types, Modes
+' Dependencies: Core, Modes
 
 Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Dim r As Result, s As State, d As Long

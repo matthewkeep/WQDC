@@ -1,6 +1,6 @@
 Option Explicit
 ' History: Audit trail for simulation runs.
-' Dependencies: Types, Schema
+' Dependencies: Core, Schema
 
 Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result)
     Dim ws As Worksheet, tbl As ListObject, row As ListRow, id As String
