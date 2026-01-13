@@ -52,7 +52,7 @@ End Function
 
 Private Sub ShowRes(ByRef r As Result)
     Dim msg As String
-    If r.TriggerDay = _Types.NO_TRIGGER Then
+    If r.TriggerDay = Core.NO_TRIGGER Then
         msg = "No trigger in " & UBound(r.Snaps) & " days." & vbNewLine & _
               "Final volume: " & Format$(r.FinalState.Vol, "0.0") & " ML"
     Else
@@ -72,7 +72,7 @@ Public Sub TestCore()
     cfg.Mode = "Simple": cfg.Days = 50: cfg.Inflow = 2: cfg.Outflow = 1: cfg.TriggerVol = 150
     r = Sim.Run(s, cfg)
 
-    If r.TriggerDay = _Types.NO_TRIGGER Then
+    If r.TriggerDay = Core.NO_TRIGGER Then
         Debug.Print "No trigger. Final vol: " & r.FinalState.Vol & " ML"
     Else
         Debug.Print "TRIGGER day " & r.TriggerDay & ": " & r.TriggerMetric
@@ -88,7 +88,7 @@ Public Sub TestTwoBucket()
     r = Sim.Run(s, cfg)
 
     Debug.Print "Two-bucket: Start EC=" & s.Chem(1) & " End EC=" & r.FinalState.Chem(1)
-    If r.TriggerDay <> _Types.NO_TRIGGER Then
+    If r.TriggerDay <> Core.NO_TRIGGER Then
         Debug.Print "  TRIGGER day " & r.TriggerDay & ": " & r.TriggerMetric
     Else
         Debug.Print "  No trigger in " & cfg.Days & " days"

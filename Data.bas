@@ -12,14 +12,14 @@ Public Function LoadState() As State
 
     Set rng = GetRng(ws, Schema.NAME_RES_ROW)
     If Not rng Is Nothing Then
-        For i = 1 To _Types.METRIC_COUNT
+        For i = 1 To Core.METRIC_COUNT
             If i <= rng.Columns.Count Then s.Chem(i) = Val(rng.Cells(1, i).Value)
         Next i
     End If
 
     Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If Not rng Is Nothing Then
-        For i = 1 To _Types.METRIC_COUNT
+        For i = 1 To Core.METRIC_COUNT
             If i <= rng.Rows.Count Then s.Hidden(i) = Val(rng.Cells(i, 1).Value)
         Next i
     End If
@@ -48,7 +48,7 @@ Public Function LoadConfig() As Config
     cfg.TriggerVol = Val(GetVal(ws, Schema.NAME_TRIGGER_VOL))
     Set rng = GetRng(ws, Schema.NAME_LIMIT_ROW)
     If Not rng Is Nothing Then
-        For i = 1 To _Types.METRIC_COUNT
+        For i = 1 To Core.METRIC_COUNT
             If i <= rng.Columns.Count Then cfg.TriggerChem(i) = Val(rng.Cells(1, i).Value)
         Next i
     End If
@@ -69,7 +69,7 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
 
     flowCol = ColIdx(tbl, Schema.IR_COL_FLOW)
     activeCol = ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    chemCol = ColIdx(tbl, _Types.MetricName(1))
+    chemCol = ColIdx(tbl, Core.MetricName(1))
     If flowCol = 0 Then Exit Sub
 
     On Error Resume Next
@@ -78,7 +78,7 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
             flow = Val(row.Range.Cells(1, flowCol).Value)
             cfg.Inflow = cfg.Inflow + flow
             If chemCol > 0 Then
-                For i = 1 To _Types.METRIC_COUNT
+                For i = 1 To Core.METRIC_COUNT
                     cfg.InflowChem(i) = cfg.InflowChem(i) + flow * Val(row.Range.Cells(1, chemCol + i - 1).Value)
                 Next i
             End If
@@ -86,8 +86,8 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
     Next row
     On Error GoTo 0
 
-    If cfg.Inflow > _Types.EPS Then
-        For i = 1 To _Types.METRIC_COUNT
+    If cfg.Inflow > Core.EPS Then
+        For i = 1 To Core.METRIC_COUNT
             cfg.InflowChem(i) = cfg.InflowChem(i) / cfg.Inflow
         Next i
     End If
@@ -99,7 +99,7 @@ Public Sub SaveResult(ByRef r As Result)
     Set ws = GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
-    If r.TriggerDay = _Types.NO_TRIGGER Then
+    If r.TriggerDay = Core.NO_TRIGGER Then
         txt = "No trigger in " & UBound(r.Snaps) & " days"
     Else
         txt = r.TriggerMetric & " day " & r.TriggerDay & " (" & Format$(r.TriggerDate, "dd-mmm") & ")"
@@ -108,7 +108,7 @@ Public Sub SaveResult(ByRef r As Result)
 
     Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If Not rng Is Nothing Then
-        For i = 1 To _Types.METRIC_COUNT
+        For i = 1 To Core.METRIC_COUNT
             If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = r.FinalState.Hidden(i)
         Next i
     End If

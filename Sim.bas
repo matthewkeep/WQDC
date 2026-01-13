@@ -5,15 +5,15 @@ Option Explicit
 Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Dim r As Result, s As State, d As Long
 
-    s = _Types.CopyState(init)
-    r.TriggerDay = _Types.NO_TRIGGER
+    s = Core.CopyState(init)
+    r.TriggerDay = Core.NO_TRIGGER
     ReDim r.Snaps(0 To cfg.Days)
     r.Snaps(0) = s
 
     For d = 1 To cfg.Days
         s = Modes.Step(s, cfg)
         r.Snaps(d) = s
-        If r.TriggerDay = _Types.NO_TRIGGER Then
+        If r.TriggerDay = Core.NO_TRIGGER Then
             If ChkTriggers(s, cfg, r.TriggerMetric) Then
                 r.TriggerDay = d
                 r.TriggerDate = cfg.StartDate + d
@@ -34,9 +34,9 @@ Private Function ChkTriggers(ByRef s As State, ByRef cfg As Config, ByRef metric
     End If
 
     ' Chemistry triggers
-    For i = 1 To _Types.METRIC_COUNT
+    For i = 1 To Core.METRIC_COUNT
         If cfg.TriggerChem(i) > 0 And s.Chem(i) >= cfg.TriggerChem(i) Then
-            metric = _Types.MetricName(i): ChkTriggers = True: Exit Function
+            metric = Core.MetricName(i): ChkTriggers = True: Exit Function
         End If
     Next i
 End Function

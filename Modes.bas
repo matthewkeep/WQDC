@@ -15,7 +15,7 @@ End Function
 Public Function StepSimple(ByRef s As State, ByRef cfg As Config) As State
     Dim n As State, i As Long, pVol As Double, mOut As Double, mIn As Double
 
-    n = _Types.CopyState(s)
+    n = Core.CopyState(s)
     pVol = s.Vol
 
     ' Volume: in + rain - out
@@ -23,10 +23,10 @@ Public Function StepSimple(ByRef s As State, ByRef cfg As Config) As State
     If n.Vol < 0 Then n.Vol = 0
 
     ' Mass balance per metric
-    For i = 1 To _Types.METRIC_COUNT
-        If pVol > _Types.EPS Then mOut = cfg.Outflow * s.Chem(i) Else mOut = 0
+    For i = 1 To Core.METRIC_COUNT
+        If pVol > Core.EPS Then mOut = cfg.Outflow * s.Chem(i) Else mOut = 0
         mIn = cfg.Inflow * cfg.InflowChem(i)
-        If n.Vol > _Types.EPS Then
+        If n.Vol > Core.EPS Then
             n.Chem(i) = (pVol * s.Chem(i) - mOut + mIn) / n.Vol
         Else
             n.Chem(i) = 0
@@ -43,9 +43,9 @@ Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
     Dim pVol As Double, alpha As Double, sf As Double
     Dim visMass As Double, hidMass As Double, mixUp As Double, mixDn As Double
 
-    n = _Types.CopyState(s)
+    n = Core.CopyState(s)
     pVol = s.Vol
-    alpha = IIf(cfg.Tau > _Types.EPS, 1 - Exp(-1 / cfg.Tau), 0.1)
+    alpha = IIf(cfg.Tau > Core.EPS, 1 - Exp(-1 / cfg.Tau), 0.1)
     sf = IIf(cfg.SurfaceFrac > 0, cfg.SurfaceFrac, 0.8)
 
     ' Volume: surface layer gets inflow/rain, loses outflow
@@ -53,7 +53,7 @@ Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
     If n.Vol < 0 Then n.Vol = 0
 
     ' Chemistry: mix between visible and hidden layers
-    For i = 1 To _Types.METRIC_COUNT
+    For i = 1 To Core.METRIC_COUNT
         visMass = s.Vol * s.Chem(i)
         hidMass = s.Hidden(i)
 
@@ -68,12 +68,12 @@ Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
         visMass = visMass + cfg.Inflow * cfg.InflowChem(i) * sf
 
         ' Outflow removes from visible
-        If pVol > _Types.EPS Then
+        If pVol > Core.EPS Then
             visMass = visMass - cfg.Outflow * (visMass / pVol)
         End If
 
         ' Update concentrations
-        If n.Vol > _Types.EPS Then n.Chem(i) = visMass / n.Vol Else n.Chem(i) = 0
+        If n.Vol > Core.EPS Then n.Chem(i) = visMass / n.Vol Else n.Chem(i) = 0
         n.Hidden(i) = hidMass
     Next i
 

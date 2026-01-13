@@ -1,5 +1,5 @@
 Option Explicit
-' _Types: Core type definitions (underscore ensures first compile).
+' Core: Type definitions (C sorts before D/M/S).
 ' Dependencies: None
 
 Public Const METRIC_COUNT As Long = 7

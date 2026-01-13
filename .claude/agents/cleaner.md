@@ -37,11 +37,14 @@ END
 
 First line must be `Option Explicit`, not metadata.
 
-## VBA Compile Order
+## VBA Compile Order & Naming
 
-Modules compile alphabetically. Type definition modules need underscore prefix:
-- `_Types.bas` → compiles before `Data.bas`, `Modes.bas`, etc.
-- Without prefix, modules referencing types fail with "Variable not defined"
+**Module names must start with a letter** (no underscore/number prefix).
+
+Modules compile alphabetically. Type modules need early-alphabet names:
+- `Core.bas` → compiles before `Data.bas`, `Modes.bas`, etc.
+- Names starting with A/B/C load before D-Z
+- Without early name, modules referencing types fail with "Variable not defined"
 
 ## Language-Specific Artifacts
 
