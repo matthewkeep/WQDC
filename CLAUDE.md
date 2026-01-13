@@ -12,9 +12,17 @@ WQDC (Water Quality Dilution Calculator) is an Excel/VBA-based simulation tool f
 
 Run in the VBA Immediate Window:
 ```
-Tests.RunSmokeSuite      ' Run all 10 smoke tests
-WQDC.TestCore            ' Quick core simulation test
-WQDC.TestTwoBucket       ' Test two-bucket mixing mode
+Setup.BuildAll           ' Create workbook structure + seed test data
+Tests.RunSmokeSuite      ' Run all 10 smoke tests (pure, no worksheet I/O)
+WQDC.Run                 ' Run full simulation with worksheet data
+WQDC.TestCore            ' Quick core test (no worksheet I/O)
+```
+
+Setup commands (standalone, can be removed after testing):
+```
+Setup.Build              ' Create sheets, tables, named ranges
+Setup.Seed               ' Populate test data
+Setup.Clean              ' Remove all WQDC sheets (reset)
 ```
 
 There is no external build system or CI/CD. Tests are executed manually within Excel.
