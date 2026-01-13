@@ -1,5 +1,7 @@
 # Scout Agent
 
+*Inherits: _foundation.md*
+
 Fast orientation in unfamiliar territory.
 
 ## Role

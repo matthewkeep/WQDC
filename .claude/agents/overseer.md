@@ -1,5 +1,7 @@
 # Overseer Agent
 
+*Inherits: _foundation.md*
+
 Orchestrate agents to execute navigator's direction.
 
 ## Role

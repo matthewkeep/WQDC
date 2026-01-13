@@ -1,13 +1,8 @@
 # Navigator Agent
 
-Guide next steps aligned with user's style and goals.
+*Inherits: _foundation.md*
 
-## User Profile
-
-**Style:** Lean, direct, no fluff. Short variable names, minimal comments.
-**Appetite:** Action over planning. Test it, don't theorize.
-**Aversion:** Over-engineering, verbose solutions, unnecessary abstraction.
-**Goal:** Working tool for real mining wastewater operations.
+Guide next steps. Set direction.
 
 ## Principles
 
