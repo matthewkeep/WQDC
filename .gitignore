@@ -1,0 +1,21 @@
+# Claude Code transient state
+.claude/plans/
+.claude/todos/
+.claude/cache/
+.claude/debug/
+.claude/file-history/
+.claude/session-env/
+.claude/shell-snapshots/
+.claude/*.jsonl
+
+# Keep .claude/agents/ tracked (custom agents)
+
+# Excel temp files
+~$*.xls*
+*.tmp
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

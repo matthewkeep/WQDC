@@ -1,7 +1,7 @@
+Attribute VB_Name = "Schema"
 Option Explicit
-' Schema: Constants, enums, and configuration schema.
-' Purpose: Central repository for sheet names, named ranges, colors, and chemistry metrics.
-' Dependencies: None (leaf module - no dependencies on other project modules)
+' Schema: Constants and configuration.
+' Dependencies: None
 
 Public Const SHEET_INPUT As String = "Inputs"
 Public Const SHEET_LOG As String = "Log"

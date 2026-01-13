@@ -1,221 +1,99 @@
 Attribute VB_Name = "Scenarios"
 Option Explicit
-' Scenarios: Data-driven regression testing for simulation math.
-' Purpose: Prove the core engine produces correct results.
+' Scenarios: Regression tests for simulation math.
 ' Dependencies: Types, Sim, Modes
-'
-' Usage:
-'   Scenarios.RunAll     - Run all scenarios, report pass/fail
-'   Scenarios.RunOne n   - Run scenario n only (1-based)
-'
-' This module is standalone and can be removed without affecting core functionality.
 
-Private Type Scenario
-    Name As String
-    InitVol As Double
-    InitChem As Double          ' EC only for simplicity
+Private Type Scen
+    Nm As String
+    Vol As Double
+    Chem As Double
     Mode As String
     Days As Long
-    Inflow As Double
-    Outflow As Double
-    InflowChem As Double        ' EC only
-    TriggerVol As Double
-    TriggerChem As Double       ' EC only
-    Tau As Double               ' For TwoBucket mode
-    HiddenMass As Double        ' For TwoBucket mode
-    ExpectedTriggerDay As Long  ' -1 = no trigger expected
-    ExpectedMetric As String    ' "Volume", "EC", or ""
+    Qin As Double
+    Qout As Double
+    ChemIn As Double
+    TrigVol As Double
+    TrigChem As Double
+    Tau As Double
+    HidMass As Double
+    ExpDay As Long      ' -1 = no trigger
+    ExpMetric As String
 End Type
 
-' ==== Public Entry Points ====================================================
-
-' Run all scenarios
 Public Sub RunAll()
-    Dim scenarios() As Scenario
-    Dim i As Long
-    Dim passed As Long
-    Dim failed As Long
+    Dim sc() As Scen
+    Dim i As Long, p As Long, f As Long
 
-    scenarios = BuildScenarios()
+    sc = BuildScenarios()
+    Debug.Print "": Debug.Print "=== Scenarios ==="
 
-    Debug.Print ""
-    Debug.Print "=== Scenario Tests ==="
-    Debug.Print ""
-
-    For i = LBound(scenarios) To UBound(scenarios)
-        If RunScenario(scenarios(i)) Then
-            passed = passed + 1
-        Else
-            failed = failed + 1
-        End If
+    For i = LBound(sc) To UBound(sc)
+        If RunOne(sc(i)) Then p = p + 1 Else f = f + 1
     Next i
 
-    Debug.Print ""
-    Debug.Print "=== Results: " & passed & " passed, " & failed & " failed ==="
-    Debug.Print ""
+    Debug.Print "": Debug.Print "Results: " & p & " pass, " & f & " fail"
 End Sub
 
-' Run single scenario by index (1-based)
-Public Sub RunOne(ByVal idx As Long)
-    Dim scenarios() As Scenario
+Private Function BuildScenarios() As Scen()
+    Dim s(0 To 5) As Scen
 
-    scenarios = BuildScenarios()
+    ' 1: Simple volume trigger
+    s(0).Nm = "Vol trigger": s(0).Vol = 90: s(0).Mode = "Simple"
+    s(0).Days = 20: s(0).Qin = 2: s(0).TrigVol = 100
+    s(0).ExpDay = 5: s(0).ExpMetric = "Volume"
 
-    If idx < 1 Or idx > UBound(scenarios) + 1 Then
-        Debug.Print "Invalid scenario index. Valid range: 1-" & UBound(scenarios) + 1
-        Exit Sub
-    End If
+    ' 2: No trigger - stable
+    s(1).Nm = "No trigger": s(1).Vol = 100: s(1).Mode = "Simple"
+    s(1).Days = 30: s(1).Qin = 1: s(1).Qout = 1: s(1).TrigVol = 200
+    s(1).ExpDay = -1
 
-    Debug.Print ""
-    RunScenario scenarios(idx - 1)
-    Debug.Print ""
-End Sub
+    ' 3: Chemistry trigger
+    s(2).Nm = "Chem trigger": s(2).Vol = 100: s(2).Chem = 80: s(2).Mode = "Simple"
+    s(2).Days = 20: s(2).Qin = 10: s(2).Qout = 10: s(2).ChemIn = 200: s(2).TrigChem = 100
+    s(2).ExpDay = 2: s(2).ExpMetric = "EC"
 
-' ==== Scenario Definitions ===================================================
+    ' 4: Volume decreasing
+    s(3).Nm = "Vol decreasing": s(3).Vol = 150: s(3).Mode = "Simple"
+    s(3).Days = 30: s(3).Qin = 1: s(3).Qout = 3: s(3).TrigVol = 200
+    s(3).ExpDay = -1
 
-Private Function BuildScenarios() As Scenario()
-    Dim s(0 To 5) As Scenario
+    ' 5: TwoBucket mixing
+    s(4).Nm = "TwoBucket mix": s(4).Vol = 100: s(4).Chem = 50: s(4).HidMass = 20000
+    s(4).Mode = "TwoBucket": s(4).Days = 30: s(4).Tau = 5: s(4).TrigChem = 100
+    s(4).ExpDay = 8: s(4).ExpMetric = "EC"
 
-    ' Scenario 1: Simple volume trigger
-    s(0).Name = "Simple volume trigger"
-    s(0).InitVol = 90
-    s(0).Mode = "Simple"
-    s(0).Days = 20
-    s(0).Inflow = 2
-    s(0).Outflow = 0
-    s(0).TriggerVol = 100
-    s(0).ExpectedTriggerDay = 5  ' 90 + 5*2 = 100
-    s(0).ExpectedMetric = "Volume"
-
-    ' Scenario 2: No trigger (volume stable)
-    s(1).Name = "No trigger - stable volume"
-    s(1).InitVol = 100
-    s(1).Mode = "Simple"
-    s(1).Days = 30
-    s(1).Inflow = 1
-    s(1).Outflow = 1
-    s(1).TriggerVol = 200
-    s(1).ExpectedTriggerDay = -1
-    s(1).ExpectedMetric = ""
-
-    ' Scenario 3: Chemistry trigger (EC rising)
-    s(2).Name = "Chemistry trigger - EC"
-    s(2).InitVol = 100
-    s(2).InitChem = 80
-    s(2).Mode = "Simple"
-    s(2).Days = 20
-    s(2).Inflow = 10
-    s(2).Outflow = 10
-    s(2).InflowChem = 200
-    s(2).TriggerChem = 100
-    s(2).ExpectedTriggerDay = 2  ' Rapid concentration rise
-    s(2).ExpectedMetric = "EC"
-
-    ' Scenario 4: Volume decreasing (no trigger)
-    s(3).Name = "Volume decreasing - no trigger"
-    s(3).InitVol = 150
-    s(3).Mode = "Simple"
-    s(3).Days = 30
-    s(3).Inflow = 1
-    s(3).Outflow = 3
-    s(3).TriggerVol = 200
-    s(3).ExpectedTriggerDay = -1
-    s(3).ExpectedMetric = ""
-
-    ' Scenario 5: TwoBucket mode - hidden mass mixing up
-    s(4).Name = "TwoBucket - hidden mass mixing"
-    s(4).InitVol = 100
-    s(4).InitChem = 50
-    s(4).HiddenMass = 20000  ' High hidden mass will mix up
-    s(4).Mode = "TwoBucket"
-    s(4).Days = 30
-    s(4).Tau = 5
-    s(4).Inflow = 0
-    s(4).Outflow = 0
-    s(4).TriggerChem = 100
-    s(4).ExpectedTriggerDay = 8  ' Approximate - hidden mass raises EC
-    s(4).ExpectedMetric = "EC"
-
-    ' Scenario 6: Fast fill to trigger
-    s(5).Name = "Fast fill - day 1 trigger"
-    s(5).InitVol = 99
-    s(5).Mode = "Simple"
-    s(5).Days = 10
-    s(5).Inflow = 5
-    s(5).Outflow = 0
-    s(5).TriggerVol = 100
-    s(5).ExpectedTriggerDay = 1  ' 99 + 5 = 104 on day 1
-    s(5).ExpectedMetric = "Volume"
+    ' 6: Fast fill
+    s(5).Nm = "Fast fill": s(5).Vol = 99: s(5).Mode = "Simple"
+    s(5).Days = 10: s(5).Qin = 5: s(5).TrigVol = 100
+    s(5).ExpDay = 1: s(5).ExpMetric = "Volume"
 
     BuildScenarios = s
 End Function
 
-' ==== Scenario Execution =====================================================
+Private Function RunOne(ByRef sc As Scen) As Boolean
+    Dim st As State, cfg As Config, r As Result
+    Dim ok As Boolean
 
-Private Function RunScenario(ByRef sc As Scenario) As Boolean
-    Dim s As State
-    Dim cfg As Config
-    Dim r As Result
-    Dim passed As Boolean
-    Dim details As String
+    st.Vol = sc.Vol: st.Chem(1) = sc.Chem: st.Hidden(1) = sc.HidMass: st.HidVol = 50
+    cfg.Mode = sc.Mode: cfg.Days = sc.Days
+    cfg.Inflow = sc.Qin: cfg.Outflow = sc.Qout: cfg.InflowChem(1) = sc.ChemIn
+    cfg.TriggerVol = sc.TrigVol: cfg.TriggerChem(1) = sc.TrigChem
+    cfg.Tau = IIf(sc.Tau > 0, sc.Tau, 7): cfg.SurfaceFrac = 0.8
 
-    ' Build initial state
-    s.Vol = sc.InitVol
-    s.Chem(1) = sc.InitChem
-    s.Hidden(1) = sc.HiddenMass
-    s.HidVol = 50  ' Default hidden volume for TwoBucket
+    r = Sim.Run(st, cfg)
 
-    ' Build config
-    cfg.Mode = sc.Mode
-    cfg.Days = sc.Days
-    cfg.Inflow = sc.Inflow
-    cfg.Outflow = sc.Outflow
-    cfg.InflowChem(1) = sc.InflowChem
-    cfg.TriggerVol = sc.TriggerVol
-    cfg.TriggerChem(1) = sc.TriggerChem
-    cfg.Tau = IIf(sc.Tau > 0, sc.Tau, 7)
-    cfg.SurfaceFrac = 0.8
-
-    ' Run simulation
-    r = Sim.Run(s, cfg)
-
-    ' Check result
-    passed = CheckResult(sc, r, details)
-
-    ' Report
-    If passed Then
-        Debug.Print "PASS: " & sc.Name
-    Else
-        Debug.Print "FAIL: " & sc.Name
-        Debug.Print "      " & details
-    End If
-
-    RunScenario = passed
-End Function
-
-Private Function CheckResult(ByRef sc As Scenario, ByRef r As Result, ByRef details As String) As Boolean
-    Dim dayOk As Boolean
-    Dim metricOk As Boolean
-
-    ' Check trigger day (allow +/- 1 day tolerance for TwoBucket due to floating point)
+    ' Check result (TwoBucket gets +/-2 day tolerance)
     If sc.Mode = "TwoBucket" Then
-        dayOk = (Abs(r.TriggerDay - sc.ExpectedTriggerDay) <= 2)
+        ok = (Abs(r.TriggerDay - sc.ExpDay) <= 2)
     Else
-        dayOk = (r.TriggerDay = sc.ExpectedTriggerDay)
+        ok = (r.TriggerDay = sc.ExpDay)
     End If
+    If sc.ExpDay >= 0 Then ok = ok And (r.TriggerMetric = sc.ExpMetric)
 
-    ' Check trigger metric
-    If sc.ExpectedTriggerDay = -1 Then
-        metricOk = (r.TriggerDay = -1)
+    If ok Then
+        Debug.Print "PASS: " & sc.Nm
     Else
-        metricOk = (r.TriggerMetric = sc.ExpectedMetric)
+        Debug.Print "FAIL: " & sc.Nm & " (exp " & sc.ExpDay & ", got " & r.TriggerDay & ")"
     End If
-
-    If Not dayOk Then
-        details = "Expected trigger day " & sc.ExpectedTriggerDay & ", got " & r.TriggerDay
-    ElseIf Not metricOk Then
-        details = "Expected metric '" & sc.ExpectedMetric & "', got '" & r.TriggerMetric & "'"
-    End If
-
-    CheckResult = (dayOk And metricOk)
+    RunOne = ok
 End Function
