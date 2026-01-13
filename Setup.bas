@@ -8,7 +8,7 @@ Option Explicit
 '   Setup.Build      - Create full workbook structure
 '   Setup.Seed       - Populate with test data
 '   Setup.BuildAll   - Build + Seed in one call
-'   Setup.Clean      - Remove all WQDC sheets (reset)
+'   Setup.Clean      - Remove all WQOC sheets (reset)
 '
 ' This module is standalone and can be removed after testing.
 
@@ -80,7 +80,7 @@ Public Sub BuildAll()
     Seed
 End Sub
 
-' Remove all WQDC sheets (clean slate)
+' Remove all WQOC sheets (clean slate)
 Public Sub Clean()
     Dim ws As Worksheet
     Dim sheetNames As Variant
@@ -107,7 +107,7 @@ Public Sub Clean()
     Next nm
     On Error GoTo 0
 
-    MsgBox "All WQDC sheets removed.", vbInformation, "Setup"
+    MsgBox "All WQOC sheets removed.", vbInformation, "Setup"
 End Sub
 
 ' ==== Sheet Creation =========================================================

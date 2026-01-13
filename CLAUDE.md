@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-WQDC (Water Quality Dilution Calculator) is an Excel/VBA-based simulation tool for mining wastewater treatment modeling. It models reservoir inflows, rainfall, mixing, and trigger-based releases to help operators plan dilution events and track water quality outcomes.
+WQOC (Water Quality Dilution Calculator) is an Excel/VBA-based simulation tool for mining wastewater treatment modeling. It models reservoir inflows, rainfall, mixing, and trigger-based releases to help operators plan dilution events and track water quality outcomes.
 
 **Platform:** Excel VBA (Windows & Mac compatible via DictionaryShim)
 
@@ -14,15 +14,15 @@ Run in the VBA Immediate Window:
 ```
 Setup.BuildAll           ' Create workbook structure + seed test data
 Tests.RunSmokeSuite      ' Run all 10 smoke tests (pure, no worksheet I/O)
-WQDC.Run                 ' Run full simulation with worksheet data
-WQDC.TestCore            ' Quick core test (no worksheet I/O)
+WQOC.Run                 ' Run full simulation with worksheet data
+WQOC.TestCore            ' Quick core test (no worksheet I/O)
 ```
 
 Setup commands (standalone, can be removed after testing):
 ```
 Setup.Build              ' Create sheets, tables, named ranges
 Setup.Seed               ' Populate test data
-Setup.Clean              ' Remove all WQDC sheets (reset)
+Setup.Clean              ' Remove all WQOC sheets (reset)
 ```
 
 Validation and regression testing:
@@ -41,7 +41,7 @@ There is no external build system or CI/CD. Tests are executed manually within E
 
 ```
 ENTRY POINT
-    WQDC.bas (~130 lines)     ' One button: WQDC.Run
+    WQOC.bas (~130 lines)     ' One button: WQOC.Run
          │
          ├── Data.bas         ' Load state/config, save results
          ├── Sim.bas          ' Core simulation loop
@@ -59,7 +59,7 @@ ENTRY POINT
 | `Sim.bas` | ~90 | Core loop: Run(), trigger detection, snapshots |
 | `Data.bas` | ~250 | Worksheet I/O: LoadState, LoadConfig, SaveResult |
 | `History.bas` | ~165 | Audit trail: RecordRun, RollbackLast |
-| `WQDC.bas` | ~170 | Entry point: Run(), Rollback(), TestCore() |
+| `WQOC.bas` | ~170 | Entry point: Run(), Rollback(), TestCore() |
 
 ### Supporting Modules
 
@@ -105,15 +105,15 @@ End Type
 
 ### Key Entry Points
 
-- `WQDC.Run` - Main simulation entry (loads from worksheet, runs sim, saves result)
-- `WQDC.Rollback` - Undo most recent run
-- `WQDC.TestCore` - Quick test without worksheet I/O
+- `WQOC.Run` - Main simulation entry (loads from worksheet, runs sim, saves result)
+- `WQOC.Rollback` - Undo most recent run
+- `WQOC.TestCore` - Quick test without worksheet I/O
 - `Tests.RunSmokeSuite` - Run all smoke tests
 
 ### Simulation Flow
 
 ```
-WQDC.Run()
+WQOC.Run()
     ├── Data.LoadState()      ' Read initial state from worksheet
     ├── Data.LoadConfig()     ' Read config from worksheet
     ├── Sim.Run(state, cfg)   ' Core simulation loop

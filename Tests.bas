@@ -11,7 +11,7 @@ Public Sub RunSmokeSuite()
     Dim passed As Long
     Dim failed As Long
 
-    Debug.Print "=== WQDC Smoke Tests ==="
+    Debug.Print "=== WQOC Smoke Tests ==="
     Debug.Print ""
 
     ' Type tests
@@ -217,15 +217,15 @@ End Function
 ' ==== Quick Manual Tests =====================================================
 
 ' Run these from Immediate Window for quick verification:
-'   Tests.TestWQDC
+'   Tests.TestWQOC
 '   Tests.TestTwoBucket
 
-Public Sub TestWQDC()
+Public Sub TestWQOC()
     ' Test the main simulation flow
-    WQDC.TestCore
+    WQOC.TestCore
 End Sub
 
 Public Sub TestTwoBucket()
     ' Test two-bucket mode
-    WQDC.TestTwoBucket
+    WQOC.TestTwoBucket
 End Sub

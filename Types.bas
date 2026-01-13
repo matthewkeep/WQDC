@@ -1,6 +1,6 @@
 Attribute VB_Name = "Types"
 Option Explicit
-' Types: Core type definitions for WQDC.
+' Types: Core type definitions for WQOC.
 ' Purpose: Minimal types - State, Config, Result. That's it.
 ' Dependencies: None
 

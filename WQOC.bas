@@ -1,13 +1,13 @@
-Attribute VB_Name = "WQDC"
+Attribute VB_Name = "WQOC"
 Option Explicit
-' WQDC: Simple entry point for the new architecture.
-' Purpose: One button, one function. This replaces the complex App.bas.
+' WQOC: Simple entry point for Water Quality Optimisation Calculator.
+' Purpose: One button, one function.
 ' Dependencies: Types, Data, Sim, History
 '
 ' Usage:
-'   WQDC.Run        - Run simulation with current inputs
-'   WQDC.Rollback   - Undo last run
-'   WQDC.TestCore   - Quick test without worksheet I/O
+'   WQOC.Run        - Run simulation with current inputs
+'   WQOC.Rollback   - Undo last run
+'   WQOC.TestCore   - Quick test without worksheet I/O
 
 ' ==== Main Entry Point ========================================================
 
@@ -52,7 +52,7 @@ HandleError:
     Application.Calculation = calcMode
     Application.ScreenUpdating = True
     Application.EnableEvents = True
-    MsgBox "Error: " & Err.Description, vbExclamation, "WQDC"
+    MsgBox "Error: " & Err.Description, vbExclamation, "WQOC"
 End Sub
 
 ' ==== Convenience Functions ===================================================
@@ -60,9 +60,9 @@ End Sub
 ' Rollback most recent run
 Public Sub Rollback()
     If History.RollbackLast() Then
-        MsgBox "Last run rolled back.", vbInformation, "WQDC"
+        MsgBox "Last run rolled back.", vbInformation, "WQOC"
     Else
-        MsgBox "No run to rollback.", vbExclamation, "WQDC"
+        MsgBox "No run to rollback.", vbExclamation, "WQOC"
     End If
 End Sub
 
@@ -70,7 +70,7 @@ End Sub
 Public Sub ShowRunCount()
     Dim count As Long
     count = History.CountRuns()
-    MsgBox "Runs for this site: " & count, vbInformation, "WQDC"
+    MsgBox "Runs for this site: " & count, vbInformation, "WQOC"
 End Sub
 
 ' Run and return trigger day (for testing/scripting)
@@ -101,7 +101,7 @@ Private Sub ShowResult(ByRef r As Result)
               "Date: " & Format$(r.TriggerDate, "dd-mmm-yyyy")
     End If
 
-    MsgBox msg, vbInformation, "WQDC Result"
+    MsgBox msg, vbInformation, "WQOC Result"
 End Sub
 
 ' ==== Quick Tests =============================================================
