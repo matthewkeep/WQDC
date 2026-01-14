@@ -4,7 +4,7 @@ Option Explicit
 '
 ' tblLive_{site}: One row per date with Std/Enh predictions side-by-side.
 ' Standard run creates/updates rows, Enhanced updates existing rows.
-' Columns: Date, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
+' Columns: Date, Days, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
 
 ' ==== Write Functions =======================================================
 
@@ -22,10 +22,14 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
     ' Writes Standard predictions - creates rows if needed
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, rowIdx As Long
-    Dim logDate As Date, col As Long
+    Dim logDate As Date, col As Long, daysCol As Long
+    Dim runDate As Date
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
+
+    runDate = Date  ' Run date is always today
+    daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
 
     n = UBound(r.Snaps)
     For i = 0 To n
@@ -35,8 +39,11 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
         rowIdx = EnsureRowForDate(tbl, logDate)
         If rowIdx = 0 Then Exit Sub  ' Failed to create row
 
-        ' Write Standard columns: Volume + all 7 chemistry metrics
+        ' Write Days column (relative to run date)
         With tbl.DataBodyRange
+            If daysCol > 0 Then .Cells(rowIdx, daysCol) = CLng(logDate - runDate)
+
+            ' Write Standard columns: Volume + all 7 chemistry metrics
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)) = r.Snaps(i).Vol
             For j = 1 To Schema.ChemistryCount()
                 col = Helpers.ColIdx(tbl, Schema.StdChemColName(j))
@@ -48,16 +55,28 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
 
     ' Calculate discrepancy from telemetry
     WriteDiscrepancy tbl, site
+
+    ' Apply row shading for sample and run dates
+    ApplyRowShading tbl, cfg.StartDate, runDate
+
+    ' Format triggered cell if trigger occurred
+    If r.TriggerDay <> Core.NO_TRIGGER Then
+        FormatLiveTriggerCell tbl, cfg.StartDate + r.TriggerDay, r.TriggerMetric, "Std"
+    End If
 End Sub
 
 Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
     ' Writes Enhanced predictions + hidden layer - updates existing rows
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, rowIdx As Long
-    Dim logDate As Date, col As Long
+    Dim logDate As Date, col As Long, daysCol As Long
+    Dim runDate As Date
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
+
+    runDate = Date  ' Run date is always today
+    daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
 
     n = UBound(r.Snaps)
     For i = 0 To n
@@ -71,8 +90,11 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
             If rowIdx = 0 Then Exit Sub
         End If
 
-        ' Write Enhanced columns: Volume + all 7 chemistry visible + hidden
+        ' Write Days column (relative to run date) - update in case row was just created
         With tbl.DataBodyRange
+            If daysCol > 0 Then .Cells(rowIdx, daysCol) = CLng(logDate - runDate)
+
+            ' Write Enhanced columns: Volume + all 7 chemistry visible + hidden
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)) = r.Snaps(i).Vol
 
             For j = 1 To Schema.ChemistryCount()
@@ -90,6 +112,11 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
 
     ' Calculate discrepancy from telemetry
     WriteDiscrepancy tbl, site
+
+    ' Format triggered cell if trigger occurred
+    If r.TriggerDay <> Core.NO_TRIGGER Then
+        FormatLiveTriggerCell tbl, cfg.StartDate + r.TriggerDay, r.TriggerMetric, "Enh"
+    End If
 End Sub
 
 Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
@@ -165,6 +192,49 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
             If errVolCol > 0 Then tbl.DataBodyRange.Cells(i, errVolCol).ClearContents
         End If
     Next i
+End Sub
+
+' ==== Formatting Helpers ====================================================
+
+Private Sub ApplyRowShading(ByVal tbl As ListObject, ByVal sampleDate As Date, ByVal runDate As Date)
+    ' Applies background color to sample date and run date rows
+    Dim i As Long, rowDate As Date
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    For i = 1 To tbl.ListRows.Count
+        rowDate = tbl.DataBodyRange.Cells(i, 1).Value
+        tbl.ListRows(i).Range.Interior.ColorIndex = xlNone  ' Clear first
+
+        If rowDate = sampleDate Then
+            tbl.ListRows(i).Range.Interior.Color = Schema.COLOR_SAMPLE_DATE
+        ElseIf rowDate = runDate Then
+            tbl.ListRows(i).Range.Interior.Color = Schema.COLOR_RUN_DATE
+        End If
+    Next i
+End Sub
+
+Private Sub FormatLiveTriggerCell(ByVal tbl As ListObject, ByVal triggerDate As Date, _
+                                   ByVal metricName As String, ByVal prefix As String)
+    ' Formats the triggered metric cell red + bold in tblLive
+    Dim rowIdx As Long, colName As String, col As Long
+
+    rowIdx = Helpers.FindRowByDate(tbl, triggerDate)
+    If rowIdx = 0 Then Exit Sub
+
+    ' Build column name based on prefix and metric
+    If metricName = "Volume" Then
+        colName = IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
+    Else
+        colName = prefix & metricName  ' e.g., "StdEC" or "EnhEC"
+    End If
+
+    col = Helpers.ColIdx(tbl, colName)
+    If col > 0 Then
+        With tbl.DataBodyRange.Cells(rowIdx, col)
+            .Font.Bold = True
+            .Font.Color = Schema.COLOR_TRIGGER_FONT
+        End With
+    End If
 End Sub
 
 ' ==== Row Lookup/Creation ===================================================

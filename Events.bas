@@ -71,6 +71,9 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     If ToggleOnOff(Target, ws, Schema.NAME_ENHANCED_MODE) Then Cancel = True: Exit Sub
     If ToggleOnOff(Target, ws, Schema.NAME_TELEM_CAL) Then Cancel = True: Exit Sub
 
+    ' Check Std/Enh toggle for Predicted row
+    If ToggleStdEnh(Target, ws, Schema.NAME_PRED_MODE) Then Cancel = True: Exit Sub
+
     ' Check IR table
     Set tbl = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If Not tbl Is Nothing Then
@@ -252,5 +255,19 @@ Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal
 
     rng.Value = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
     ToggleOnOff = True
+End Function
+
+Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
+    ' Toggle Std/Enh for named range if clicked; returns True if handled
+    Dim rng As Range, current As String
+    On Error Resume Next
+    Set rng = ws.Range(nm)
+    On Error GoTo 0
+    If rng Is Nothing Then Exit Function
+    If Intersect(Target, rng) Is Nothing Then Exit Function
+
+    current = UCase$(Trim$(rng.Value))
+    rng.Value = IIf(current = "STD", "Enh", "Std")
+    ToggleStdEnh = True
 End Function
 

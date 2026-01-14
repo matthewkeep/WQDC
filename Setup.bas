@@ -239,6 +239,8 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("A5"), "Predicted"
     AddNm Schema.NAME_RESULT_VOL, ws.Range("B5")
     AddNm Schema.NAME_PRED_ROW, ws.Range("C5").Resize(1, n)
+    SetIfEmpty ws.Range("J5"), "Std"
+    AddNm Schema.NAME_PRED_MODE, ws.Range("J5")
 
     ' Row 7-8: Inputs table
     SetIfEmpty ws.Range("A7"), "Inputs"
@@ -837,14 +839,15 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     ' Find position for new table (after existing tables)
     startCol = FindNextTableColumn(ws)
 
-    ' Build header: Date, Std (Vol + 7 chem), Enh (Vol + 7 chem), EnhHid (7 chem), ErrVol, ErrEC, RunId
-    ' Total: 1 + 8 + 8 + 7 + 3 = 27 columns
+    ' Build header: Date, Days, Std (Vol + 7 chem), Enh (Vol + 7 chem), EnhHid (7 chem), ErrVol, ErrEC, RunId
+    ' Total: 1 + 1 + 8 + 8 + 7 + 3 = 28 columns
     Dim col As Long, j As Long
-    ReDim h(1 To 27)
+    ReDim h(1 To 28)
     col = 1
 
-    ' Date column
+    ' Date and Days columns
     h(col) = Schema.LIVE_COL_DATE: col = col + 1
+    h(col) = Schema.LIVE_COL_DAYS: col = col + 1
 
     ' Standard columns: StdVol, StdEC, StdF_U, StdF_Mn, StdSO4, StdMg, StdCa, StdTAN
     h(col) = Schema.LIVE_COL_STD_VOL: col = col + 1

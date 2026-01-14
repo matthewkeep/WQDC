@@ -33,6 +33,7 @@ Public Const NAME_MIXING_MODEL As String = "Cfg_MixingModel"
 Public Const NAME_RAINFALL_MODE As String = "Cfg_RainfallMode"
 Public Const NAME_TELEM_CAL As String = "Cfg_TelemCal"
 Public Const NAME_RAIN_FACTOR As String = "Cfg_RainFactor"
+Public Const NAME_PRED_MODE As String = "Pred_Mode"
 
 ' ==== Table Names ============================================================
 Public Const TABLE_IR As String = "tblIR"
@@ -47,6 +48,7 @@ Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
 
 ' Live table columns (date-centric log with Std/Enh side-by-side)
 Public Const LIVE_COL_DATE As String = "Date"
+Public Const LIVE_COL_DAYS As String = "Days"
 Public Const LIVE_COL_STD_VOL As String = "StdVol"
 Public Const LIVE_COL_STD_EC As String = "StdEC"
 Public Const LIVE_COL_ENH_VOL As String = "EnhVol"
@@ -99,6 +101,10 @@ Public Const COLOR_FONT_WHITE As Long = &HFFFFFF     ' #FFFFFF - White text
 
 ' Log row colors
 Public Const COLOR_SAMPLE_DATE As Long = &HFFFFCC    ' #CCFFFF - Light cyan for sample date row
+Public Const COLOR_RUN_DATE As Long = &HCCFFCC       ' #CCFFCC - Light green for run date row
+
+' Trigger formatting
+Public Const COLOR_TRIGGER_FONT As Long = &H0000C0   ' #C00000 - Red for triggered values
 
 ' ==== Table Styles ===========================================================
 Public Const TABLE_STYLE_DEFAULT As String = "TableStyleMedium2"

@@ -81,23 +81,29 @@ Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
 - Action: "Current" or "Rollback"
 - Load: Always "Load" (clickable to restore settings)
 
-## Live Table Columns (27 total)
+## Live Table Columns (28 total)
 
 ```
-Date,
+Date, Days,
 StdVol, StdEC, StdF_U, StdF_Mn, StdSO4, StdMg, StdCa, StdTAN,
 EnhVol, EnhEC, EnhF_U, EnhF_Mn, EnhSO4, EnhMg, EnhCa, EnhTAN,
 EnhHidEC, EnhHidF_U, EnhHidF_Mn, EnhHidSO4, EnhHidMg, EnhHidCa, EnhHidTAN,
 ErrVol, ErrEC, RunId
 ```
 
+- Days: Relative to run date (0 = today, negative = past, positive = forecast)
 - Std[chem]: Standard mode predictions (all 7 chemistry metrics)
 - Enh[chem]: Enhanced mode visible layer predictions
 - EnhHid[chem]: Enhanced hidden layer mass (TwoBucket continuity)
 - ErrVol/ErrEC: Prediction vs telemetry discrepancy
+- Row shading: Sample date = light cyan, Run date = light green
+- Triggered values: Red + bold formatting
 
-## Inputs Sheet Layout (N-O)
+## Inputs Sheet Layout
 
+**J5 Toggle:** Pred_Mode (Std/Enh) - controls which result displays in Predicted row
+
+**N-O Column (Enhanced Settings):**
 ```
 Row 7:  Enhanced header
 Row 8:  Enabled (toggle)
