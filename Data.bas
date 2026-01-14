@@ -272,7 +272,6 @@ Private Sub SetVal(ByVal ws As Worksheet, ByVal nm As String, ByVal v As Variant
     If Not rng Is Nothing Then rng.Value = v
 End Sub
 
-
 Private Function IsActive(ByVal v As Variant) As Boolean
     Dim s As String
     s = UCase$(Trim$(CStr(v)))

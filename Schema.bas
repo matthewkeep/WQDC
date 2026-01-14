@@ -42,8 +42,6 @@ Public Const TABLE_TRIGGER As String = "tblTrigger"
 ' Per-site table prefixes (tables created on-demand)
 Public Const LIVE_TABLE_PREFIX As String = "tblLive_"
 Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
-Public Const LOG_TABLE_PREFIX As String = "tblLog_"       ' Legacy - to be removed
-Public Const SEASON_LOG_PREFIX As String = "tblSeasonLog_" ' Legacy - to be removed
 
 ' Live table columns (date-centric log with Std/Enh side-by-side)
 Public Const LIVE_COL_DATE As String = "Date"
@@ -173,11 +171,6 @@ Public Function EnhHidColName(ByVal idx As Long) As String
     EnhHidColName = "EnhHid" & idx
 End Function
 
-Public Function LogTableName(ByVal site As String) As String
-    ' Legacy - Returns table name for site's log table (e.g., "tblLog_RP1")
-    LogTableName = LOG_TABLE_PREFIX & site
-End Function
-
 Public Function HistoryTableName(ByVal site As String) As String
     ' Returns table name for site's history table (e.g., "tblHistory_RP1")
     HistoryTableName = HISTORY_TABLE_PREFIX & site
@@ -194,8 +187,8 @@ Public Function TelemVolColName(ByVal site As String) As String
 End Function
 
 Public Function SeasonLogTableName(ByVal site As String) As String
-    ' Returns table name for site's season log table (e.g., "tblSeasonLog_RP1")
-    SeasonLogTableName = SEASON_LOG_PREFIX & site
+    ' Returns table name for site's season backtest table (e.g., "tblSeasonLog_RP1")
+    SeasonLogTableName = "tblSeasonLog_" & site
 End Function
 
 ' ==== Shared Worksheet/Table Helpers ========================================

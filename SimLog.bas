@@ -134,27 +134,25 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
             ' Calculate EC discrepancy
             If errECCol > 0 And Not IsEmpty(telemEC) Then
                 ' Use Enhanced if available, else Standard
+                predEC = 0
                 If enhECCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, enhECCol).Value) Then
                     predEC = tbl.DataBodyRange.Cells(i, enhECCol).Value
-                ElseIf stdECCol > 0 Then
+                ElseIf stdECCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, stdECCol).Value) Then
                     predEC = tbl.DataBodyRange.Cells(i, stdECCol).Value
                 End If
-                If predEC > 0 Then
-                    tbl.DataBodyRange.Cells(i, errECCol).Value = CDbl(telemEC) - predEC
-                End If
+                tbl.DataBodyRange.Cells(i, errECCol).Value = CDbl(telemEC) - predEC
             End If
 
             ' Calculate Volume discrepancy
             If errVolCol > 0 And Not IsEmpty(telemVol) Then
                 ' Use Enhanced if available, else Standard
+                predVol = 0
                 If enhVolCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, enhVolCol).Value) Then
                     predVol = tbl.DataBodyRange.Cells(i, enhVolCol).Value
-                ElseIf stdVolCol > 0 Then
+                ElseIf stdVolCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, stdVolCol).Value) Then
                     predVol = tbl.DataBodyRange.Cells(i, stdVolCol).Value
                 End If
-                If predVol > 0 Then
-                    tbl.DataBodyRange.Cells(i, errVolCol).Value = CDbl(telemVol) - predVol
-                End If
+                tbl.DataBodyRange.Cells(i, errVolCol).Value = CDbl(telemVol) - predVol
             End If
         Else
             ' No telemetry for this date - clear discrepancy
@@ -299,26 +297,3 @@ Private Function GetLiveTable(ByVal site As String) As ListObject
         On Error GoTo 0
     End If
 End Function
-
-' ==== Legacy Support (to be removed in Phase 7) =============================
-
-Public Sub DeleteRun(ByVal runId As String, ByVal site As String)
-    ' Legacy: Deletes rows by RunId (no longer used - kept for compatibility)
-    ' New architecture uses DeleteAfterDate for rollback
-    Dim tbl As ListObject
-    Dim i As Long, runIdCol As Long
-
-    Set tbl = GetLiveTable(site)
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
-
-    runIdCol = Schema.ColIdx(tbl, Schema.LIVE_COL_RUNID)
-    If runIdCol = 0 Then Exit Sub
-
-    ' Delete from bottom up
-    For i = tbl.ListRows.Count To 1 Step -1
-        If tbl.DataBodyRange.Cells(i, runIdCol).Value = runId Then
-            tbl.ListRows(i).Delete
-        End If
-    Next i
-End Sub

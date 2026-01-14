@@ -773,45 +773,6 @@ End Sub
 
 ' ==== Per-Site Table Creation (called on-demand) =============================
 
-Public Sub EnsureSiteLogTable(ByVal site As String)
-    ' LEGACY: Creates old run-centric log table (replaced by EnsureSiteLiveTable)
-    ' Kept for migration/compatibility - will be removed in future version
-    Dim ws As Worksheet, tbl As ListObject, tblName As String
-    Dim chem As Variant, n As Long, h() As String, i As Long
-    Dim startCol As Long
-
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    tblName = Schema.LogTableName(site)
-
-    ' Check if table already exists
-    On Error Resume Next
-    Set tbl = ws.ListObjects(tblName)
-    On Error GoTo 0
-    If Not tbl Is Nothing Then Exit Sub
-
-    ' Find position for new table (after existing tables)
-    startCol = FindNextTableColumn(ws)
-
-    ' Build header
-    chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
-    ReDim h(1 To n + 4)
-    h(1) = "RunId": h(2) = "Date": h(3) = "Day": h(4) = Schema.VOLUME_METRIC_NAME
-    For i = 1 To n: h(4 + i) = chem(i - 1): Next i
-
-    ' Add site label above table
-    ws.Cells(1, startCol).Value = site & " Log"
-    ws.Cells(1, startCol).Font.Bold = True
-
-    ' Create table
-    MakeTblLight ws, ws.Cells(3, startCol), tblName, h
-
-    ' Format Date column
-    Set tbl = ws.ListObjects(tblName)
-    If Not tbl Is Nothing Then
-        tbl.ListColumns(2).DataBodyRange.NumberFormat = "d/mm/yy"
-    End If
-End Sub
-
 Public Sub EnsureSiteHistoryTable(ByVal site As String)
     ' Creates history table for site if it doesn't exist
     Dim ws As Worksheet, tbl As ListObject, tblName As String
