@@ -39,8 +39,8 @@ WQOC.bas ─┬─ Data.bas ──────── Schema.bas
 | Sim.bas | Run loop, trigger detection |
 | Data.bas | Worksheet I/O (Input/Config/Results) |
 | Telemetry.bas | Telemetry data access (Rain, EC, Vol) |
-| History.bas | Audit trail, Jenga rollback |
-| SimLog.bas | Persistent daily snapshots |
+| History.bas | Audit trail, date-based rollback |
+| SimLog.bas | Date-centric live log (UPSERT to tblLive) |
 | Loader.bas | Site selection, IR/chemistry population |
 | Events.bas | Worksheet change handlers |
 | WQOC.bas | Entry point + chart generation |
@@ -97,7 +97,14 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 
 ## Per-Site Architecture
 
-- Log/History tables per site: `tblLog_RP1`, `tblHistory_RP1`
-- Telemetry columns per site: `EC (RP1)`, `Vol (RP1)` (Rain is global)
-- RunId format: `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
+- **Live tables per site:** `tblLive_RP1`, `tblHistory_RP1`
+- **Live table structure:** Date-centric with Std/Enh side-by-side
+  - Columns: Date, StdVol, StdEC, EnhVol, EnhEC, EnhHid1-7, ErrVol, ErrEC, RunId
+  - One row per date (UPSERT on run, not append)
+  - Hidden layer stored for TwoBucket continuity between runs
+  - Discrepancy columns (ErrVol/ErrEC) compare prediction vs telemetry
+- **Telemetry columns per site:** `EC (RP1)`, `Vol (RP1)` (Rain is global)
+- **RunId format:** `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
+- **Rollback:** Date-based (`DeleteAfterDate`), not run-based
+- **Charts:** Read from tblLive for full season view
 - Tables created on-demand (first run) or via `Setup.Initialize`

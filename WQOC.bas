@@ -4,11 +4,11 @@ Option Explicit
 
 Public Sub Run()
     ' Main entry point - runs Standard, optionally Enhanced, generates charts
-    Dim s As State, cfgStd As Config, cfgEnh As Config
+    Dim s As State, logState As State, cfgStd As Config, cfgEnh As Config
     Dim rStd As Result, rEnh As Result
     Dim runIdStd As String, runIdEnh As String
     Dim site As String, cm As XlCalculation, latestDate As Date
-    Dim enhancedMode As Boolean
+    Dim enhancedMode As Boolean, i As Long
     On Error GoTo Cleanup
 
     cm = Application.Calculation
@@ -32,8 +32,8 @@ Public Sub Run()
     latestDate = SimLog.GetLatestLogDate(site)
     If latestDate > 0 And cfgStd.StartDate < latestDate Then
         Application.ScreenUpdating = True
-        If MsgBox("Start date (" & Format$(cfgStd.StartDate, "dd-mmm") & ") is before existing log data (" & _
-                  Format$(latestDate, "dd-mmm") & "). This will overwrite future forecasts." & vbNewLine & vbNewLine & _
+        If MsgBox("Start date (" & Format$(cfgStd.StartDate, "d/mm/yy") & ") is before existing log data (" & _
+                  Format$(latestDate, "d/mm/yy") & "). This will overwrite future forecasts." & vbNewLine & vbNewLine & _
                   "Continue?", vbYesNo + vbQuestion, "WQOC") = vbNo Then
             GoTo Cleanup
         End If
@@ -59,9 +59,20 @@ Public Sub Run()
             s = Data.SnapState(s, site)
         End If
 
-        ' Initialize hidden layer at equilibrium on first Enhanced run
-        If IsHiddenUninitialized(s) Then
-            s = Core.InitHiddenAtEquilibrium(s)
+        ' Load hidden layer from log for TwoBucket continuity
+        ' Priority: 1) Log at sample date, 2) Inputs sheet, 3) Initialize at equilibrium
+        If cfgEnh.Mode = "TwoBucket" Then
+            logState = Data.LoadHiddenFromLog(site, cfgEnh.StartDate)
+            If logState.Hidden(1) > Core.EPS Then
+                ' Found hidden state in log - use it
+                For i = 1 To Core.METRIC_COUNT
+                    s.Hidden(i) = logState.Hidden(i)
+                Next i
+            ElseIf IsHiddenUninitialized(s) Then
+                ' No log data and Inputs sheet empty - initialize at equilibrium
+                s = Core.InitHiddenAtEquilibrium(s)
+            End If
+            ' Else: use hidden state from Inputs sheet (LoadState already loaded it)
         End If
 
         rEnh = Sim.Run(s, cfgEnh)
@@ -77,13 +88,6 @@ Public Sub Run()
     Application.Calculation = cm
     Application.ScreenUpdating = True
     Application.EnableEvents = True
-
-    ' Show results (Standard result shown, Enhanced noted if run)
-    If enhancedMode Then
-        ShowResDual rStd, rEnh
-    Else
-        ShowRes rStd
-    End If
     Exit Sub
 
 Cleanup:
@@ -137,77 +141,63 @@ Public Function GetTrigDay() As Long
     GetTrigDay = r.TriggerDay
 End Function
 
-Private Sub ShowRes(ByRef r As Result)
-    Dim msg As String
-    If r.TriggerDay = Core.NO_TRIGGER Then
-        msg = "No trigger in " & UBound(r.Snaps) & " days." & vbNewLine & _
-              "Final volume: " & Format$(r.FinalState.Vol, "0.0") & " ML"
-    Else
-        msg = "TRIGGER REACHED" & vbNewLine & vbNewLine & _
-              "Metric: " & r.TriggerMetric & vbNewLine & _
-              "Day: " & r.TriggerDay & vbNewLine & _
-              "Date: " & Format$(r.TriggerDate, "dd-mmm-yyyy")
-    End If
-    MsgBox msg, vbInformation, "WQOC Result"
-End Sub
-
-Private Sub ShowResDual(ByRef rStd As Result, ByRef rEnh As Result)
-    Dim msg As String
-    msg = "STANDARD MODE:" & vbNewLine
-    If rStd.TriggerDay = Core.NO_TRIGGER Then
-        msg = msg & "  No trigger in " & UBound(rStd.Snaps) & " days" & vbNewLine
-    Else
-        msg = msg & "  Trigger: " & rStd.TriggerMetric & " on day " & rStd.TriggerDay & vbNewLine
-    End If
-
-    msg = msg & vbNewLine & "ENHANCED MODE:" & vbNewLine
-    If rEnh.TriggerDay = Core.NO_TRIGGER Then
-        msg = msg & "  No trigger in " & UBound(rEnh.Snaps) & " days"
-    Else
-        msg = msg & "  Trigger: " & rEnh.TriggerMetric & " on day " & rEnh.TriggerDay
-    End If
-
-    MsgBox msg, vbInformation, "WQOC Result"
-End Sub
-
 ' ==== Chart Generation =======================================================
 
 Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd As Result, ByRef rEnh As Result, ByVal hasEnhanced As Boolean)
-    ' Draws charts from simulation results - Standard solid, Enhanced dashed
-    Dim wsChart As Worksheet
+    ' Draws charts from tblLive - shows full season timeline
+    ' Standard solid, Enhanced dashed, Trigger threshold
+    Dim wsChart As Worksheet, wsLog As Worksheet
+    Dim tbl As ListObject
     Dim cht As ChartObject
     Dim n As Long, i As Long
     Dim dates() As Date, volStd() As Double, volEnh() As Double
     Dim ecStd() As Double, ecEnh() As Double
     Dim trigArr() As Double
+    Dim dateCol As Long, stdVolCol As Long, stdECCol As Long
+    Dim enhVolCol As Long, enhECCol As Long
+    Dim hasEnhData As Boolean
 
     On Error Resume Next
     Set wsChart = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
+    Set wsLog = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
     On Error GoTo 0
     If wsChart Is Nothing Then Exit Sub
+    If wsLog Is Nothing Then Exit Sub
 
-    ' Build arrays from Standard result
-    n = UBound(rStd.Snaps) + 1
+    ' Get live table for site
+    On Error Resume Next
+    Set tbl = wsLog.ListObjects(Schema.LiveTableName(site))
+    On Error GoTo 0
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    n = tbl.ListRows.Count
     If n < 1 Then Exit Sub
 
+    ' Get column indices
+    dateCol = 1  ' Date is always first column
+    stdVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
+    stdECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
+    enhVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
+    enhECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
+
+    ' Build arrays from live table
     ReDim dates(1 To n)
     ReDim volStd(1 To n)
     ReDim ecStd(1 To n)
-    For i = 0 To n - 1
-        dates(i + 1) = cfg.StartDate + i
-        volStd(i + 1) = rStd.Snaps(i).Vol
-        ecStd(i + 1) = rStd.Snaps(i).Chem(1)
-    Next i
+    ReDim volEnh(1 To n)
+    ReDim ecEnh(1 To n)
 
-    ' Build Enhanced arrays if available
-    If hasEnhanced Then
-        ReDim volEnh(1 To n)
-        ReDim ecEnh(1 To n)
-        For i = 0 To n - 1
-            volEnh(i + 1) = rEnh.Snaps(i).Vol
-            ecEnh(i + 1) = rEnh.Snaps(i).Chem(1)
-        Next i
-    End If
+    For i = 1 To n
+        dates(i) = tbl.DataBodyRange.Cells(i, dateCol).Value
+        If stdVolCol > 0 Then volStd(i) = Val(tbl.DataBodyRange.Cells(i, stdVolCol).Value)
+        If stdECCol > 0 Then ecStd(i) = Val(tbl.DataBodyRange.Cells(i, stdECCol).Value)
+        If enhVolCol > 0 Then
+            volEnh(i) = Val(tbl.DataBodyRange.Cells(i, enhVolCol).Value)
+            If volEnh(i) > 0 Then hasEnhData = True
+        End If
+        If enhECCol > 0 Then ecEnh(i) = Val(tbl.DataBodyRange.Cells(i, enhECCol).Value)
+    Next i
 
     ' Clear existing charts
     For Each cht In wsChart.ChartObjects: cht.Delete: Next cht
@@ -225,8 +215,8 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
             .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
             .Format.Line.Weight = 2
         End With
-        ' Enhanced series
-        If hasEnhanced Then
+        ' Enhanced series (if data exists)
+        If hasEnhData Then
             With .SeriesCollection.NewSeries
                 .Name = "Enh Volume"
                 .XValues = dates
@@ -251,7 +241,7 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
         End If
         .HasTitle = True: .ChartTitle.Text = site & " - Volume"
         .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
-        .Axes(xlCategory).TickLabels.NumberFormat = "dd-mmm"
+        .Axes(xlCategory).TickLabels.NumberFormat = "d/mm/yy"
         .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "ML"
     End With
 
@@ -269,8 +259,8 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
             .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
             .Format.Line.Weight = 2
         End With
-        ' Enhanced series
-        If hasEnhanced Then
+        ' Enhanced series (if data exists)
+        If hasEnhData Then
             With .SeriesCollection.NewSeries
                 .Name = "Enh EC"
                 .XValues = dates
@@ -295,7 +285,7 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
         End If
         .HasTitle = True: .ChartTitle.Text = site & " - EC"
         .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
-        .Axes(xlCategory).TickLabels.NumberFormat = "dd-mmm"
+        .Axes(xlCategory).TickLabels.NumberFormat = "d/mm/yy"
         .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "EC (uS/cm)"
     End With
 End Sub

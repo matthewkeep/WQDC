@@ -20,7 +20,6 @@ Public Const NAME_SAMPLE_DATE As String = "RR_SampleDate"
 Public Const NAME_RUN_DATE As String = "Run_Date"
 Public Const NAME_TAU As String = "Cfg_Tau"
 Public Const NAME_SURFACE_FRACTION As String = "Cfg_SurfaceFrac"
-Public Const NAME_NET_OUT As String = "Cfg_NetOut"
 Public Const NAME_LIMIT_ROW As String = "Limit_Row"
 Public Const NAME_RES_ROW As String = "Res_Row"
 Public Const NAME_ENHANCED_MODE As String = "Cfg_EnhancedMode"
@@ -41,9 +40,21 @@ Public Const TABLE_CATALOG As String = "tblCatalog"
 Public Const TABLE_TRIGGER As String = "tblTrigger"
 
 ' Per-site table prefixes (tables created on-demand)
-Public Const LOG_TABLE_PREFIX As String = "tblLog_"
+Public Const LIVE_TABLE_PREFIX As String = "tblLive_"
 Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
-Public Const SEASON_LOG_PREFIX As String = "tblSeasonLog_"
+Public Const LOG_TABLE_PREFIX As String = "tblLog_"       ' Legacy - to be removed
+Public Const SEASON_LOG_PREFIX As String = "tblSeasonLog_" ' Legacy - to be removed
+
+' Live table columns (date-centric log with Std/Enh side-by-side)
+Public Const LIVE_COL_DATE As String = "Date"
+Public Const LIVE_COL_STD_VOL As String = "StdVol"
+Public Const LIVE_COL_STD_EC As String = "StdEC"
+Public Const LIVE_COL_ENH_VOL As String = "EnhVol"
+Public Const LIVE_COL_ENH_EC As String = "EnhEC"
+Public Const LIVE_COL_ERR_VOL As String = "ErrVol"
+Public Const LIVE_COL_ERR_EC As String = "ErrEC"
+Public Const LIVE_COL_RUNID As String = "RunId"
+' Note: EnhHid1-7 columns are chemistry-based, built dynamically
 
 ' ==== Column Names ===========================================================
 ' IR table columns
@@ -51,7 +62,7 @@ Public Const IR_COL_SOURCE As String = "Source"
 Public Const IR_COL_FLOW As String = "Flow (ML/d)"
 Public Const IR_COL_ACTIVE As String = "Active"
 Public Const IR_COL_SAMPLE_DATE As String = "Sample Date"
-Public Const IR_COL_ACTION As String = "Action"
+Public Const IR_COL_ACTION As String = "Add Input"
 
 ' History table columns
 Public Const HISTORY_COL_ACTION As String = "Action"
@@ -152,8 +163,18 @@ Public Function ColIdx(ByVal tbl As ListObject, ByVal colName As String) As Long
     On Error GoTo 0
 End Function
 
+Public Function LiveTableName(ByVal site As String) As String
+    ' Returns table name for site's live log table (e.g., "tblLive_RP1")
+    LiveTableName = LIVE_TABLE_PREFIX & site
+End Function
+
+Public Function EnhHidColName(ByVal idx As Long) As String
+    ' Returns hidden layer column name (e.g., "EnhHid1", "EnhHid2", ...)
+    EnhHidColName = "EnhHid" & idx
+End Function
+
 Public Function LogTableName(ByVal site As String) As String
-    ' Returns table name for site's log table (e.g., "tblLog_RP1")
+    ' Legacy - Returns table name for site's log table (e.g., "tblLog_RP1")
     LogTableName = LOG_TABLE_PREFIX & site
 End Function
 
@@ -208,4 +229,14 @@ Public Sub StyleActionCell(ByVal cell As Range)
         .Font.Color = COLOR_ACTION_FONT
         .Font.Underline = xlUnderlineStyleSingle
     End With
+End Sub
+
+Public Sub InitIRRowAction(ByVal rowRng As Range, ByVal tbl As ListObject)
+    ' Sets action cell value and styling only - no other formatting
+    Dim actionCol As Long
+    actionCol = ColIdx(tbl, IR_COL_ACTION)
+    If actionCol > 0 Then
+        rowRng.Cells(1, actionCol).Value = ACTION_REMOVE
+        StyleActionCell rowRng.Cells(1, actionCol)
+    End If
 End Sub

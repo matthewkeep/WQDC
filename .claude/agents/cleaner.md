@@ -75,6 +75,23 @@ Set worksheetObject = GetSheet()
 If worksheetObject Is Nothing Then Exit Sub
 ```
 
+## Naming Principle
+
+When experimenting with new logic, don't invent verbose names to describe intent. Use simple names that already work; let comments explain.
+
+```vba
+' Good - simple name, comment explains
+' Calculate days from Run Date (today), not Sample Date
+Dim days As Long
+days = r.TriggerDay - dayOffset
+
+' Bad - verbose name trying to self-document
+Dim daysFromTodayNotSampleDate As Long
+daysFromTodayNotSampleDate = r.TriggerDay - dayOffset
+```
+
+If a name works (`days`), keep it. Don't rename to `daysFromToday` just because the calculation changed.
+
 ## Output
 
 Cleaned file. Note line reduction. Move on.

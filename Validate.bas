@@ -59,7 +59,6 @@ Private Sub ChkRanges()
     ChkRange Schema.NAME_HIDDEN_MASS
     ChkRange Schema.NAME_TAU
     ChkRange Schema.NAME_SURFACE_FRACTION
-    ChkRange Schema.NAME_NET_OUT
     ChkRange Schema.NAME_ENHANCED_MODE
     ChkRange Schema.NAME_STD_TRIGGER
     ChkRange Schema.NAME_MIXING_MODEL

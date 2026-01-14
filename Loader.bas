@@ -64,6 +64,7 @@ Private Sub PopulateIRFromCatalog(ByVal site As String)
                     Next i
                 End If
             End With
+            Schema.InitIRRowAction tblIR.ListRows(tblIR.ListRows.Count).Range, tblIR
         End If
     Next catRow
 End Sub

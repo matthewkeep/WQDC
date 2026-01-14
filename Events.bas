@@ -53,24 +53,41 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
         End If
     End If
 
-    ' Check IR table action column
+    ' Check IR table
     Set tbl = Schema.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If Not tbl Is Nothing Then
         actionCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTION)
+        Dim activeCol As Long
+        activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+
+        ' Check Add Input header
         If actionCol > 0 Then
-            ' Check header (Add)
             If Not Intersect(Target, tbl.HeaderRowRange.Cells(1, actionCol)) Is Nothing Then
                 Cancel = True
                 AddIRRow tbl
                 Exit Sub
             End If
-            ' Check data rows (Remove)
-            If Not tbl.DataBodyRange Is Nothing Then
-                If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
-                    Cancel = True
-                    rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
-                    RemoveIRRow tbl, rowIdx
-                    Exit Sub
+        End If
+
+        ' Check data rows
+        If Not tbl.DataBodyRange Is Nothing Then
+            rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
+            If rowIdx >= 1 And rowIdx <= tbl.ListRows.Count Then
+                ' Active column - toggle Yes/No
+                If activeCol > 0 Then
+                    If Not Intersect(Target, tbl.DataBodyRange.Columns(activeCol)) Is Nothing Then
+                        Cancel = True
+                        ToggleActiveRow tbl, rowIdx
+                        Exit Sub
+                    End If
+                End If
+                ' Action column - remove row
+                If actionCol > 0 Then
+                    If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
+                        Cancel = True
+                        RemoveIRRow tbl, rowIdx
+                        Exit Sub
+                    End If
                 End If
             End If
         End If
@@ -128,13 +145,35 @@ End Sub
 ' ==== IR Table Actions =========================================================
 
 Private Sub AddIRRow(ByVal tbl As ListObject)
-    ' Add a new empty row to IR table with "Remove" action
-    Dim newRow As ListRow, actionCol As Long
+    ' Add a new empty row to IR table with "Remove" action and Active=Yes
+    Dim newRow As ListRow, activeCol As Long
     Set newRow = tbl.ListRows.Add
-    actionCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTION)
-    If actionCol > 0 Then
-        newRow.Range.Cells(1, actionCol).Value = Schema.ACTION_REMOVE
-        Schema.StyleActionCell newRow.Range.Cells(1, actionCol)
+    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
+    Schema.InitIRRowAction newRow.Range, tbl
+End Sub
+
+Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
+    ' Toggle Active between Yes/No and grey out inactive rows
+    Dim activeCol As Long, cell As Range, rowRng As Range
+    Dim isActive As Boolean
+
+    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    If activeCol = 0 Then Exit Sub
+
+    Set cell = tbl.DataBodyRange.Cells(rowIdx, activeCol)
+    Set rowRng = tbl.ListRows(rowIdx).Range
+
+    ' Toggle value
+    isActive = (UCase$(Trim$(cell.Value)) = "YES")
+    If isActive Then
+        cell.Value = "No"
+        ' Grey out the row
+        rowRng.Font.Color = RGB(150, 150, 150)
+    Else
+        cell.Value = "Yes"
+        ' Restore row formatting
+        rowRng.Font.Color = RGB(0, 0, 0)
     End If
 End Sub
 

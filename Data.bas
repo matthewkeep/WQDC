@@ -98,7 +98,7 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
     cfg.StartDate = GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
     cfg.Tau = Val(GetVal(ws, Schema.NAME_TAU))
-    cfg.Outflow = Val(GetVal(ws, Schema.NAME_NET_OUT))
+    cfg.Outflow = Val(GetVal(ws, Schema.NAME_OUTPUT))
     cfg.SurfaceFrac = Val(GetVal(ws, Schema.NAME_SURFACE_FRACTION))
     If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
 
@@ -180,8 +180,10 @@ End Sub
 
 Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     ' Saves result to appropriate output cell based on runType
-    Dim ws As Worksheet, txt As String, rng As Range, i As Long
+    ' Days output is relative to Run Date (today), not Sample Date
+    Dim ws As Worksheet, rng As Range, i As Long
     Dim predState As State, targetName As String
+    Dim sampleDate As Date, runDate As Date, dayOffset As Long
     On Error Resume Next
     Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
@@ -193,11 +195,16 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
         predState = r.FinalState
     End If
 
-    ' Build result text
+    ' Calculate days from Run Date (today), not Sample Date
+    sampleDate = GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
+    runDate = GetDateVal(ws, Schema.NAME_RUN_DATE)
+    dayOffset = CLng(runDate - sampleDate)
+
+    Dim days As Long
     If r.TriggerDay = Core.NO_TRIGGER Then
-        txt = "No trigger in " & UBound(r.Snaps) & " days"
+        days = UBound(r.Snaps) - dayOffset
     Else
-        txt = r.TriggerMetric & " day " & r.TriggerDay & " (" & Format$(r.TriggerDate, "dd-mmm") & ")"
+        days = r.TriggerDay - dayOffset
     End If
 
     ' Write to appropriate trigger output cell
@@ -206,7 +213,7 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     Else
         targetName = Schema.NAME_STD_TRIGGER
     End If
-    SetVal ws, targetName, txt
+    SetVal ws, targetName, days
 
     ' Standard: update predicted row only (no hidden layer in Simple mode)
     If UCase$(runType) = "STANDARD" Then
@@ -270,4 +277,71 @@ Private Function IsActive(ByVal v As Variant) As Boolean
     Dim s As String
     s = UCase$(Trim$(CStr(v)))
     IsActive = (s = "TRUE" Or s = "YES" Or s = "ON" Or s = "1" Or s = "X")
+End Function
+
+' ==== Log-Based State Loading ===============================================
+
+Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date) As State
+    ' Loads hidden layer state from tblLive at targetDate for TwoBucket continuity
+    ' Returns State with Hidden(1-7) populated, other fields zeroed
+    ' If no data found, returns empty state (Hidden = 0)
+    Dim tbl As ListObject, ws As Worksheet
+    Dim rowIdx As Long, i As Long, hidCol As Long
+    Dim s As State
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Function
+
+    ' Get live table for site
+    On Error Resume Next
+    Set tbl = ws.ListObjects(Schema.LiveTableName(site))
+    On Error GoTo 0
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+
+    ' Find row for target date
+    rowIdx = FindLogRowByDate(tbl, targetDate)
+    If rowIdx = 0 Then Exit Function
+
+    ' Read hidden layer values
+    For i = 1 To Core.METRIC_COUNT
+        hidCol = Schema.ColIdx(tbl, Schema.EnhHidColName(i))
+        If hidCol > 0 Then
+            s.Hidden(i) = Val(tbl.DataBodyRange.Cells(rowIdx, hidCol).Value)
+        End If
+    Next i
+
+    LoadHiddenFromLog = s
+End Function
+
+Public Function HasLogDataForDate(ByVal site As String, ByVal targetDate As Date) As Boolean
+    ' Returns True if tblLive has data for the specified date
+    Dim tbl As ListObject, ws As Worksheet
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Function
+
+    On Error Resume Next
+    Set tbl = ws.ListObjects(Schema.LiveTableName(site))
+    On Error GoTo 0
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+
+    HasLogDataForDate = (FindLogRowByDate(tbl, targetDate) > 0)
+End Function
+
+Private Function FindLogRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
+    ' Returns row index (1-based) for date in log table, or 0 if not found
+    Dim i As Long
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    For i = 1 To tbl.ListRows.Count
+        If CDate(tbl.DataBodyRange.Cells(i, 1).Value) = targetDate Then
+            FindLogRowByDate = i
+            Exit Function
+        End If
+    Next i
 End Function

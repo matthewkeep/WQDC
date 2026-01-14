@@ -287,7 +287,7 @@ Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As
     cfg.Site = site
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
     cfg.Tau = Val(GetInputVal(Schema.NAME_TAU))
-    cfg.Outflow = Val(GetInputVal(Schema.NAME_NET_OUT))
+    cfg.Outflow = Val(GetInputVal(Schema.NAME_OUTPUT))
     cfg.SurfaceFrac = Val(GetInputVal(Schema.NAME_SURFACE_FRACTION))
     If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
 

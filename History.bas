@@ -60,15 +60,27 @@ Public Function CountRuns(ByVal site As String) As Long
 End Function
 
 Public Function RollbackLast(ByVal site As String) As Boolean
-    ' Deletes last run from history AND its SimLog entries
-    Dim tbl As ListObject, runId As String
+    ' Deletes last run from history AND log entries after that run's start date
+    Dim tbl As ListObject, startDate As Date
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
-    runId = tbl.ListRows(tbl.ListRows.Count).Range.Cells(1, 1).Value
-    SimLog.DeleteRun runId, site
+    ' Get start date of last run (column 3 = RunDate)
+    startDate = tbl.ListRows(tbl.ListRows.Count).Range.Cells(1, 3).Value
+
+    ' Delete log entries after the previous run's start date
+    If tbl.ListRows.Count > 1 Then
+        ' Roll back to previous run's end date
+        Dim prevStartDate As Date
+        prevStartDate = tbl.ListRows(tbl.ListRows.Count - 1).Range.Cells(1, 3).Value
+        SimLog.DeleteAfterDate prevStartDate, site
+    Else
+        ' Last run - delete all log entries before this run
+        SimLog.DeleteAfterDate startDate - 1, site
+    End If
+
     tbl.ListRows(tbl.ListRows.Count).Delete
 
     ' Update new last row to Current
@@ -88,27 +100,30 @@ Public Function RollbackTo(ByVal targetRunId As String, ByVal site As String) As
     ' Deletes all runs AFTER targetRunId for site (Jenga model)
     ' Returns count of runs removed
     Dim tbl As ListObject
-    Dim runId As String, i As Long, foundTarget As Boolean, removed As Long
+    Dim runId As String, i As Long, targetIdx As Long, removed As Long
+    Dim targetStartDate As Date
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
-    ' First pass: find the target run to verify it exists
+    ' Find the target run to get its start date
+    targetIdx = 0
     For i = 1 To tbl.ListRows.Count
         If tbl.ListRows(i).Range.Cells(1, 1).Value = targetRunId Then
-            foundTarget = True
+            targetIdx = i
+            targetStartDate = tbl.ListRows(i).Range.Cells(1, 3).Value  ' RunDate column
             Exit For
         End If
     Next i
-    If Not foundTarget Then Exit Function
+    If targetIdx = 0 Then Exit Function
 
-    ' Second pass: delete all runs that come AFTER target
+    ' Delete log entries after target run's start date
+    SimLog.DeleteAfterDate targetStartDate, site
+
+    ' Delete all history rows that come AFTER target
     ' Work backwards from end to avoid index issues
-    For i = tbl.ListRows.Count To 1 Step -1
-        runId = tbl.ListRows(i).Range.Cells(1, 1).Value
-        If runId = targetRunId Then Exit For  ' Stop at target
-        SimLog.DeleteRun runId, site
+    For i = tbl.ListRows.Count To targetIdx + 1 Step -1
         tbl.ListRows(i).Delete
         removed = removed + 1
     Next i
