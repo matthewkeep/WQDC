@@ -31,6 +31,7 @@ Public Const NAME_HIDDEN_MASS As String = "RR_HiddenMass"
 Public Const NAME_MIXING_MODEL As String = "Cfg_MixingModel"
 Public Const NAME_RAINFALL_MODE As String = "Cfg_RainfallMode"
 Public Const NAME_TELEM_CAL As String = "Cfg_TelemCal"
+Public Const NAME_RAIN_FACTOR As String = "Cfg_RainFactor"
 
 ' ==== Table Names ============================================================
 Public Const TABLE_IR As String = "tblIR"

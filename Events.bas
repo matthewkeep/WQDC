@@ -22,13 +22,27 @@ Option Explicit
 
 Public Sub OnInputsChange(ByVal Target As Range)
     ' Called from Inputs sheet Worksheet_Change event
-    Dim siteRng As Range
+    Dim siteRng As Range, sampleDateRng As Range
     On Error Resume Next
     Set siteRng = Target.Worksheet.Range(Schema.NAME_SITE)
+    Set sampleDateRng = Target.Worksheet.Range(Schema.NAME_SAMPLE_DATE)
     On Error GoTo 0
-    If siteRng Is Nothing Then Exit Sub
-    If Not Intersect(Target, siteRng) Is Nothing Then
-        Loader.LoadSiteData CStr(Target.Value)
+
+    ' Site change: reload IR data
+    If Not siteRng Is Nothing Then
+        If Not Intersect(Target, siteRng) Is Nothing Then
+            Loader.LoadSiteData CStr(Target.Value)
+            Exit Sub
+        End If
+    End If
+
+    ' Sample date change: load hidden mass from log for user feedback
+    If Not sampleDateRng Is Nothing Then
+        If Not Intersect(Target, sampleDateRng) Is Nothing Then
+            If Not siteRng Is Nothing Then
+                Data.LoadHiddenForDate CStr(siteRng.Value), CDate(Target.Value)
+            End If
+        End If
     End If
 End Sub
 

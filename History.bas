@@ -7,6 +7,7 @@ Option Explicit
 
 Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As String, ByVal site As String)
     ' Records run metadata to site's history table. RunId must match SimLog entry.
+    ' New columns (RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor) for config versioning
     Dim tbl As ListObject, row As ListRow, i As Long, actionCol As Long
 
     Set tbl = GetHistoryTable(site)
@@ -31,11 +32,24 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
         .Cells(1, 3).Value = cfg.StartDate
         .Cells(1, 4).Value = cfg.Days
         .Cells(1, 5).Value = cfg.Mode
-        .Cells(1, 6).Value = r.TriggerDay
-        .Cells(1, 7).Value = r.TriggerMetric
+        ' New config columns - write if columns exist (backward compatibility)
+        WriteColIfExists tbl, row, "RainfallMode", cfg.RainfallMode
+        WriteColIfExists tbl, row, "TelemCal", IIf(Data.GetTelemCalEnabled(), "On", "Off")
+        WriteColIfExists tbl, row, "Tau", cfg.Tau
+        WriteColIfExists tbl, row, "SurfaceFrac", cfg.SurfaceFrac
+        WriteColIfExists tbl, row, "RainFactor", cfg.RainFactor
+        WriteColIfExists tbl, row, "TriggerDay", r.TriggerDay
+        WriteColIfExists tbl, row, "TriggerMetric", r.TriggerMetric
         .Cells(1, actionCol).Value = Schema.ACTION_CURRENT
         Schema.StyleActionCell .Cells(1, actionCol)
     End With
+End Sub
+
+Private Sub WriteColIfExists(ByVal tbl As ListObject, ByVal row As ListRow, ByVal colName As String, ByVal v As Variant)
+    ' Writes value to column if it exists (for backward compatibility with old tables)
+    Dim col As Long
+    col = Schema.ColIdx(tbl, colName)
+    If col > 0 Then row.Range.Cells(1, col).Value = v
 End Sub
 
 Public Function GetLastRun(ByVal site As String) As Variant
@@ -146,10 +160,15 @@ Public Function GetRunHistory(ByVal site As String) As Variant
     ' Each row: (RunId, Timestamp, StartDate, TriggerDay, TriggerMetric)
     Dim tbl As ListObject
     Dim result() As Variant, i As Long
+    Dim trigDayCol As Long, trigMetricCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
+
+    ' Get column indices (handles old and new table layouts)
+    trigDayCol = Schema.ColIdx(tbl, "TriggerDay")
+    trigMetricCol = Schema.ColIdx(tbl, "TriggerMetric")
 
     ' Build result array
     ReDim result(1 To tbl.ListRows.Count, 1 To 5)
@@ -157,8 +176,8 @@ Public Function GetRunHistory(ByVal site As String) As Variant
         result(i, 1) = tbl.ListRows(i).Range.Cells(1, 1).Value  ' RunId
         result(i, 2) = tbl.ListRows(i).Range.Cells(1, 2).Value  ' Timestamp
         result(i, 3) = tbl.ListRows(i).Range.Cells(1, 3).Value  ' StartDate
-        result(i, 4) = tbl.ListRows(i).Range.Cells(1, 6).Value  ' TriggerDay
-        result(i, 5) = tbl.ListRows(i).Range.Cells(1, 7).Value  ' TriggerMetric
+        If trigDayCol > 0 Then result(i, 4) = tbl.ListRows(i).Range.Cells(1, trigDayCol).Value
+        If trigMetricCol > 0 Then result(i, 5) = tbl.ListRows(i).Range.Cells(1, trigMetricCol).Value
     Next i
 
     GetRunHistory = result

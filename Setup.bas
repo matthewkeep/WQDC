@@ -265,23 +265,22 @@ Private Sub SetupInput()
     ' Column N-O: Enhanced section
     SetIfEmpty ws.Range("N7"), "Enhanced"
     SetIfEmpty ws.Range("N8"), "Enabled": AddNm Schema.NAME_ENHANCED_MODE, ws.Range("O8")
-    SetIfEmpty ws.Range("N9"), "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("O9")
-    SetIfEmpty ws.Range("N10"), "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("O10")
-    SetIfEmpty ws.Range("N11"), "Mixing Model": AddNm Schema.NAME_MIXING_MODEL, ws.Range("O11")
-
-    ' Column N-O: Mixing section
-    SetIfEmpty ws.Range("N13"), "Mixing"
-    SetIfEmpty ws.Range("N14"), "Tau (days)": AddNm Schema.NAME_TAU, ws.Range("O14")
-    SetIfEmpty ws.Range("N15"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O15")
+    SetIfEmpty ws.Range("N9"), "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("O9")
+    SetIfEmpty ws.Range("N10"), "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("O10")
+    SetIfEmpty ws.Range("N11"), "Rain Factor": AddNm Schema.NAME_RAIN_FACTOR, ws.Range("O11")
+    SetIfEmpty ws.Range("N12"), "Mixing Model": AddNm Schema.NAME_MIXING_MODEL, ws.Range("O12")
+    SetIfEmpty ws.Range("N13"), "Tau (days)": AddNm Schema.NAME_TAU, ws.Range("O13")
+    SetIfEmpty ws.Range("N14"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O14")
 
     ' Column N-O: Hidden Mass section
-    SetIfEmpty ws.Range("N17"), "Hidden Mass"
-    For i = 0 To n - 1: SetIfEmpty ws.Cells(18 + i, 14), chem(i): Next i
-    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O18").Resize(n, 1)
+    SetIfEmpty ws.Range("N16"), "Hidden Mass"
+    For i = 0 To n - 1: SetIfEmpty ws.Cells(17 + i, 14), chem(i): Next i
+    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O17").Resize(n, 1)
 
     ' Conditional formatting (grey-out) - always reapply
-    ApplyEnhancedConditionalFormat ws.Range("N9:O24"), ws.Range("O8")
-    ApplyMixingConditionalFormat ws.Range("N13:O24"), ws.Range("O8"), ws.Range("O11")
+    ApplyEnhancedConditionalFormat ws.Range("N9:O23"), ws.Range("O8")
+    ApplyRainFactorConditionalFormat ws.Range("N11:O11"), ws.Range("O10")
+    ApplyMixingConditionalFormat ws.Range("N13:O14"), ws.Range("O12")
 End Sub
 
 Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As Long)
@@ -795,8 +794,11 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     ws.Cells(1, startCol).Font.Bold = True
 
     ' Create table (no Site column - site is in table name)
+    ' Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action
     MakeTbl ws, ws.Cells(3, startCol), tblName, _
-        Array("RunId", "Timestamp", "RunDate", "Days", "Mode", "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION)
+        Array("RunId", "Timestamp", "RunDate", "Days", "Mode", _
+              "RainfallMode", "TelemCal", "Tau", "SurfaceFrac", "RainFactor", _
+              "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION)
 
     ' Style action column header and format date columns
     Set tbl = ws.ListObjects(tblName)
@@ -984,13 +986,24 @@ Private Sub ApplyEnhancedConditionalFormat(ByVal targetRange As Range, ByVal tog
     End With
 End Sub
 
-Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal enhToggle As Range, ByVal modelCell As Range)
-    ' Greys out Tau/Surface Fraction when Enhanced=Off OR Model<>TwoBucket
+Private Sub ApplyRainFactorConditionalFormat(ByVal targetRange As Range, ByVal rainfallCell As Range)
+    ' Greys out Rain Factor when Rainfall is Off
     Dim fc As FormatCondition
     targetRange.FormatConditions.Delete
     Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
-        Formula1:="=OR(" & enhToggle.Address(True, True) & "<>""On""," & _
-                  modelCell.Address(True, True) & "<>""TwoBucket"")")
+        Formula1:="=" & rainfallCell.Address(True, True) & "=""Off""")
+    With fc
+        .Font.Color = RGB(180, 180, 180)  ' Grey text
+        .Interior.Color = RGB(242, 242, 242)  ' Light grey background
+    End With
+End Sub
+
+Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal modelCell As Range)
+    ' Greys out Tau/Surface Fraction when Mixing Model is Simple
+    Dim fc As FormatCondition
+    targetRange.FormatConditions.Delete
+    Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
+        Formula1:="=" & modelCell.Address(True, True) & "<>""TwoBucket""")
     With fc
         .Font.Color = RGB(180, 180, 180)  ' Grey text
         .Interior.Color = RGB(242, 242, 242)  ' Light grey background

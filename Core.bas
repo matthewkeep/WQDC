@@ -23,6 +23,7 @@ Public Type Config
     Outflow As Double
     RainVol As Double
     RainfallMode As String
+    RainFactor As Double
     SurfaceFrac As Double
     InflowChem(1 To 7) As Double
     TriggerVol As Double

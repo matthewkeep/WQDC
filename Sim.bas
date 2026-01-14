@@ -15,7 +15,7 @@ Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
         currentDate = cfg.StartDate + d
 
         ' Apply per-day rainfall if enabled
-        cfg.RainVol = GetRainForDay(currentDate, cfg.StartDate, cfg.RainfallMode)
+        cfg.RainVol = GetRainForDay(currentDate, cfg)
 
         s = Modes.Step(s, cfg)
         r.Snaps(d) = s
@@ -31,32 +31,36 @@ Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Run = r
 End Function
 
-Private Function GetRainForDay(ByVal d As Date, ByVal startDate As Date, ByVal mode As String) As Double
-    ' Returns rainfall volume for a given day based on mode
+Private Function GetRainForDay(ByVal d As Date, ByRef cfg As Config) As Double
+    ' Returns rainfall volume (ML) for a given day based on mode
     ' Off: no rain, Hindcast: actual past rain, Hindcast+Forecast: extrapolate average
-    Dim avgRain As Double, hindcastDays As Long
+    ' RainFactor converts mm to ML (e.g., RainFactor=40 means 1mm = 40 ML)
+    Dim avgRain As Double, hindcastDays As Long, rainMM As Double
 
-    If UCase$(mode) = UCase$(Schema.RAINFALL_OFF) Or Len(mode) = 0 Then
+    If UCase$(cfg.RainfallMode) = UCase$(Schema.RAINFALL_OFF) Or Len(cfg.RainfallMode) = 0 Then
         GetRainForDay = 0
         Exit Function
     End If
 
     If d <= Date Then
         ' Hindcast period: use actual telemetry
-        GetRainForDay = Telemetry.GetRainForDate(d)
-    ElseIf UCase$(mode) = UCase$(Schema.RAINFALL_FULL) Then
+        rainMM = Telemetry.GetRainForDate(d)
+    ElseIf UCase$(cfg.RainfallMode) = UCase$(Schema.RAINFALL_FULL) Then
         ' Forecast with typical: average daily rain from hindcast period
-        hindcastDays = Date - startDate
+        hindcastDays = Date - cfg.StartDate
         If hindcastDays > 0 Then
-            avgRain = Telemetry.GetTotalRain(startDate, Date) / hindcastDays
+            avgRain = Telemetry.GetTotalRain(cfg.StartDate, Date) / hindcastDays
         Else
             avgRain = 0
         End If
-        GetRainForDay = avgRain
+        rainMM = avgRain
     Else
         ' Hindcast only: no rain for forecast days
-        GetRainForDay = 0
+        rainMM = 0
     End If
+
+    ' Apply rain factor (mm to ML conversion)
+    GetRainForDay = rainMM * cfg.RainFactor
 End Function
 
 Private Function ChkTriggers(ByRef s As State, ByRef cfg As Config, ByRef metric As String) As Boolean

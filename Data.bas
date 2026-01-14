@@ -130,6 +130,10 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
 
         ' Set rainfall mode (applied per-day in Sim.Run)
         cfg.RainfallMode = rainfallMode
+
+        ' Load rain factor (mm to ML conversion)
+        cfg.RainFactor = Val(GetVal(ws, Schema.NAME_RAIN_FACTOR))
+        If cfg.RainFactor = 0 Then cfg.RainFactor = 1  ' Default 1:1
     Else
         ' Standard: Simple mode, no rainfall, no calibration
         cfg.Mode = "Simple"
@@ -314,6 +318,29 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
 
     LoadHiddenFromLog = s
 End Function
+
+Public Sub LoadHiddenForDate(ByVal site As String, ByVal targetDate As Date)
+    ' Loads hidden mass from log at date and displays in Inputs sheet
+    ' Called when user changes Sample Date for TwoBucket feedback
+    Dim s As State, ws As Worksheet, rng As Range, i As Long
+
+    If Len(site) = 0 Or targetDate = 0 Then Exit Sub
+
+    s = LoadHiddenFromLog(site, targetDate)
+    If s.Hidden(1) < Core.EPS Then Exit Sub  ' No data found
+
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    If ws Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    Set rng = ws.Range(Schema.NAME_HIDDEN_MASS)
+    On Error GoTo 0
+    If rng Is Nothing Then Exit Sub
+
+    For i = 1 To Core.METRIC_COUNT
+        If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = s.Hidden(i)
+    Next i
+End Sub
 
 Public Function HasLogDataForDate(ByVal site As String, ByVal targetDate As Date) As Boolean
     ' Returns True if tblLive has data for the specified date
