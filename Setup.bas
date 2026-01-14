@@ -133,7 +133,7 @@ Private Function EnsureSiteTelemColumns(ByVal site As String) As Boolean
     Dim addedAny As Boolean
 
     On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     On Error GoTo 0
     If tbl Is Nothing Then Exit Function
@@ -165,7 +165,7 @@ End Function
 Public Sub Clean()
     Dim ws As Worksheet, nm As Name, sheets As Variant, i As Long
     sheets = Array(Schema.SHEET_INPUT, Schema.SHEET_CONFIG, Schema.SHEET_RESULTS, _
-                   Schema.SHEET_TELEMETRY, Schema.SHEET_HISTORY, Schema.SHEET_CHART, Schema.SHEET_LOG)
+                   Schema.SHEET_HISTORY, Schema.SHEET_CHART, Schema.SHEET_LOG)
     Application.DisplayAlerts = False
     For i = LBound(sheets) To UBound(sheets)
         On Error Resume Next
@@ -186,7 +186,6 @@ Private Sub MakeSheets()
     MakeSheet Schema.SHEET_INPUT
     MakeSheet Schema.SHEET_CONFIG
     MakeSheet Schema.SHEET_RESULTS
-    MakeSheet Schema.SHEET_TELEMETRY
     MakeSheet Schema.SHEET_HISTORY
     MakeSheet Schema.SHEET_CHART
     MakeSheet Schema.SHEET_LOG
@@ -239,7 +238,7 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("A5"), "Predicted"
     AddNm Schema.NAME_RESULT_VOL, ws.Range("B5")
     AddNm Schema.NAME_PRED_ROW, ws.Range("C5").Resize(1, n)
-    SetIfEmpty ws.Range("J5"), "Std"
+    SetIfEmpty ws.Range("J5"), "Standard"
     AddNm Schema.NAME_PRED_MODE, ws.Range("J5")
 
     ' Row 7-8: Inputs table
@@ -308,6 +307,9 @@ Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n 
             StyleActionHeader tbl, Schema.IR_COL_ACTION, "Add Input"
         End If
     End If
+
+    ' Apply conditional formatting for Active column (grey when No)
+    If Not tbl Is Nothing Then ApplyIRActiveConditionalFormat tbl
 End Sub
 
 ' ==== Config Sheet ===========================================================
@@ -344,12 +346,11 @@ End Sub
 Private Sub SetupTelemetry()
     ' Creates base telemetry table with Date and Rain columns only
     ' Per-site EC/Vol columns are added by Initialize
+    ' Table placed at column L on Results sheet
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
-    ws.Range("A1") = "Telemetry Data": ws.Range("A1").Font.Bold = True
-    ws.Range("A2") = "Daily observations - leave cells blank if data unavailable"
-    ws.Range("A3") = "Run 'Initialize' after setting up Catalog to add site columns"
-    MakeTbl ws, ws.Range("A5"), Schema.TABLE_TELEMETRY, _
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
+    ws.Range("L1") = "Telemetry": ws.Range("L1").Font.Bold = True
+    MakeTbl ws, ws.Range("L2"), Schema.TABLE_TELEMETRY, _
         Array(Schema.TELEM_COL_DATE, Schema.TELEM_COL_RAIN)
 End Sub
 
@@ -450,7 +451,7 @@ Private Sub SeedTelemetry()
     ' Run Initialize after SeedConfig to add site-specific columns
     Dim ws As Worksheet, tbl As ListObject, d As Date, i As Long
     Dim rain As Variant
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     d = Date - 14
     ' Rain data (mm) - all days have data
@@ -471,7 +472,7 @@ Private Sub SeedSiteTelemetry(ByVal site As String)
     Dim ecCol As Long, volCol As Long
     Dim ec As Variant, vol As Variant
 
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
@@ -678,7 +679,7 @@ Private Sub SeedFullTelemetry()
     Dim baseDate As Date, d As Date, i As Long
     Dim rain As Double
 
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     If tbl Is Nothing Then Exit Sub
     If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
@@ -717,7 +718,7 @@ Public Sub SeedSiteTelemFull(ByVal site As String)
     Dim baseEC As Double, baseVol As Double
     Dim ec As Double, vol As Double, rain As Double
 
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
@@ -871,12 +872,8 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     h(col) = Schema.LIVE_COL_ERR_EC: col = col + 1
     h(col) = Schema.LIVE_COL_RUNID
 
-    ' Add site label above table
-    ws.Cells(1, startCol).Value = site & " Live"
-    ws.Cells(1, startCol).Font.Bold = True
-
-    ' Create table with light style
-    MakeTblLight ws, ws.Cells(3, startCol), tblName, h
+    ' Create table with light style (starts row 2)
+    MakeTblLight ws, ws.Cells(2, startCol), tblName, h
 
     ' Format Date column
     Set tbl = ws.ListObjects(tblName)
@@ -1019,6 +1016,32 @@ Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal model
     End With
 End Sub
 
+Private Sub ApplyIRActiveConditionalFormat(ByVal tbl As ListObject)
+    ' Greys out IR table rows when Active column = "No"
+    Dim activeCol As Long, fc As FormatCondition
+    Dim dataRng As Range, activeColLetter As String
+
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    If activeCol = 0 Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    Set dataRng = tbl.DataBodyRange
+
+    ' Clear existing conditional formatting on table data
+    dataRng.FormatConditions.Delete
+
+    ' Get column letter for Active column (relative reference for each row)
+    activeColLetter = Split(tbl.ListColumns(activeCol).DataBodyRange.Cells(1, 1).Address, "$")(1)
+
+    ' Apply conditional format: grey when Active <> "Yes"
+    Set fc = dataRng.FormatConditions.Add(Type:=xlExpression, _
+        Formula1:="=$" & activeColLetter & tbl.DataBodyRange.Row & "<>""Yes""")
+    With fc
+        .Font.Color = RGB(180, 180, 180)  ' Grey text
+        .Interior.Color = RGB(242, 242, 242)  ' Light grey background
+    End With
+End Sub
+
 Private Sub AddNm(ByVal nm As String, ByVal rng As Range)
     On Error Resume Next: ThisWorkbook.Names(nm).Delete: On Error GoTo 0
     ThisWorkbook.Names.Add nm, "=" & rng.Address(True, True, xlA1, True)
@@ -1030,24 +1053,39 @@ Private Sub SetIfEmpty(ByVal rng As Range, ByVal v As Variant)
 End Sub
 
 Private Sub MakeTbl(ByVal ws As Worksheet, ByVal start As Range, ByVal nm As String, ByVal h As Variant)
+    ' Creates table if not exists, clears data if exists (preserves formatting)
+    ' Tables start empty (no data rows) - use EnsureRows to add rows
     Dim n As Long, tbl As ListObject
-    On Error Resume Next: ws.ListObjects(nm).Delete: On Error GoTo 0
+    On Error Resume Next: Set tbl = ws.ListObjects(nm): On Error GoTo 0
+    If Not tbl Is Nothing Then
+        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+        Exit Sub
+    End If
     If IsArray(h) Then n = UBound(h) - LBound(h) + 1 Else n = 1
     start.Resize(1, n) = h: start.Resize(1, n).Font.Bold = True
     Set tbl = ws.ListObjects.Add(xlSrcRange, start.Resize(2, n), , xlYes)
     tbl.Name = nm
-    On Error Resume Next: tbl.TableStyle = Schema.TABLE_STYLE_DEFAULT: On Error GoTo 0
+    On Error Resume Next: tbl.TableStyle = "TableStyleLight1": On Error GoTo 0
+    ' Remove initial blank row so table starts empty
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
 End Sub
 
 Private Sub MakeTblLight(ByVal ws As Worksheet, ByVal start As Range, ByVal nm As String, ByVal h As Variant)
-    ' Creates table with TableStyleLight8
+    ' Creates table if not exists, clears data if exists (preserves formatting)
+    ' Tables start empty (no data rows) - use EnsureRows to add rows
     Dim n As Long, tbl As ListObject
-    On Error Resume Next: ws.ListObjects(nm).Delete: On Error GoTo 0
+    On Error Resume Next: Set tbl = ws.ListObjects(nm): On Error GoTo 0
+    If Not tbl Is Nothing Then
+        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+        Exit Sub
+    End If
     If IsArray(h) Then n = UBound(h) - LBound(h) + 1 Else n = 1
     start.Resize(1, n) = h: start.Resize(1, n).Font.Bold = True
     Set tbl = ws.ListObjects.Add(xlSrcRange, start.Resize(2, n), , xlYes)
     tbl.Name = nm
-    On Error Resume Next: tbl.TableStyle = "TableStyleLight8": On Error GoTo 0
+    On Error Resume Next: tbl.TableStyle = "TableStyleLight1": On Error GoTo 0
+    ' Remove initial blank row so table starts empty
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
 End Sub
 
 Private Sub EnsureRows(ByVal tbl As ListObject, ByVal n As Long)

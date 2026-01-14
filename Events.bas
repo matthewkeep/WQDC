@@ -191,35 +191,25 @@ Private Sub AddIRRow(ByVal tbl As ListObject)
 End Sub
 
 Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
-    ' Toggle Active between Yes/No and grey out inactive rows
-    Dim activeCol As Long, cell As Range, rowRng As Range
+    ' Toggle Active between Yes/No (conditional formatting handles grey-out)
+    Dim activeCol As Long, cell As Range
     Dim isActive As Boolean
 
     activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol = 0 Then Exit Sub
 
     Set cell = tbl.DataBodyRange.Cells(rowIdx, activeCol)
-    Set rowRng = tbl.ListRows(rowIdx).Range
 
-    ' Toggle value
+    ' Toggle value - conditional formatting auto-greys when Active="No"
     isActive = (UCase$(Trim$(cell.Value)) = "YES")
-    If isActive Then
-        cell.Value = "No"
-        ' Grey out the row
-        rowRng.Font.Color = RGB(150, 150, 150)
-    Else
-        cell.Value = "Yes"
-        ' Restore row formatting
-        rowRng.Font.Color = RGB(0, 0, 0)
-    End If
+    cell.Value = IIf(isActive, "No", "Yes")
 End Sub
 
 Private Sub RemoveIRRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
     ' Remove a row from IR table
     If tbl.ListRows.Count = 1 Then
-        ' Don't delete last row, just clear it
-        tbl.DataBodyRange.ClearContents
-        tbl.DataBodyRange.Cells(1, Helpers.ColIdx(tbl, Schema.IR_COL_ACTION)).Value = Schema.ACTION_REMOVE
+        ' Don't delete last row, just clear it entirely
+        tbl.ListRows(1).Range.ClearContents
     Else
         tbl.ListRows(rowIdx).Delete
     End If
@@ -258,7 +248,7 @@ Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal
 End Function
 
 Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
-    ' Toggle Std/Enh for named range if clicked; returns True if handled
+    ' Toggle Standard/Enhanced for named range if clicked; returns True if handled
     Dim rng As Range, current As String
     On Error Resume Next
     Set rng = ws.Range(nm)
@@ -267,7 +257,7 @@ Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVa
     If Intersect(Target, rng) Is Nothing Then Exit Function
 
     current = UCase$(Trim$(rng.Value))
-    rng.Value = IIf(current = "STD", "Enh", "Std")
+    rng.Value = IIf(current = "STANDARD", "Enhanced", "Standard")
     ToggleStdEnh = True
 End Function
 

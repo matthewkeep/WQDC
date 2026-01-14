@@ -135,7 +135,7 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
     ' Get telemetry table
-    Set tblTelem = Helpers.GetTable(Schema.SHEET_TELEMETRY, Schema.TABLE_TELEMETRY)
+    Set tblTelem = Helpers.GetTable(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
     If tblTelem Is Nothing Then Exit Sub
     If tblTelem.DataBodyRange Is Nothing Then Exit Sub
 

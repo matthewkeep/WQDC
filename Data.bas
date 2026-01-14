@@ -84,7 +84,7 @@ Public Function GetTelemCalEnabled() As Boolean
 End Function
 
 Public Function GetPredMode() As String
-    ' Returns "STD" or "ENH" based on J5 toggle cell
+    ' Returns "STANDARD" or "ENHANCED" based on J5 toggle cell
     Dim ws As Worksheet
     Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
@@ -92,7 +92,7 @@ Public Function GetPredMode() As String
         GetPredMode = UCase$(Trim$(ws.Range(Schema.NAME_PRED_MODE).Value))
         On Error GoTo 0
     End If
-    If GetPredMode <> "ENH" Then GetPredMode = "STD"  ' Default to STD
+    If GetPredMode <> "ENHANCED" Then GetPredMode = "STANDARD"  ' Default to Standard
 End Function
 
 Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Config
@@ -231,12 +231,12 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     End If
     Helpers.WriteToRange ws, targetName, days
 
-    ' Write to Pred_Row based on Pred_Mode toggle (J5: Std/Enh)
+    ' Write to Pred_Row based on Pred_Mode toggle (J5: Standard/Enhanced)
     Dim predMode As String
     predMode = GetPredMode()
 
-    If (UCase$(runType) = "STANDARD" And predMode = "STD") Or _
-       (UCase$(runType) = "ENHANCED" And predMode = "ENH") Then
+    If (UCase$(runType) = "STANDARD" And predMode = "STANDARD") Or _
+       (UCase$(runType) = "ENHANCED" And predMode = "ENHANCED") Then
         Helpers.WriteToRange ws, Schema.NAME_RESULT_VOL, predState.Vol
         Set rng = Helpers.GetRng(ws, Schema.NAME_PRED_ROW)
         If Not rng Is Nothing Then

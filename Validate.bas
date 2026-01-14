@@ -32,7 +32,6 @@ Private Sub ChkSheets()
     ChkSheet Schema.SHEET_INPUT
     ChkSheet Schema.SHEET_CONFIG
     ChkSheet Schema.SHEET_RESULTS
-    ChkSheet Schema.SHEET_TELEMETRY
     ChkSheet Schema.SHEET_HISTORY
     ChkSheet Schema.SHEET_LOG
     ChkSheet Schema.SHEET_CHART
@@ -79,7 +78,7 @@ Private Sub ChkTables()
     ChkTable Schema.SHEET_CONFIG, Schema.TABLE_CATALOG
     ChkTable Schema.SHEET_CONFIG, Schema.TABLE_TRIGGER
     ChkTable Schema.SHEET_RESULTS, Schema.TABLE_RESULTS
-    ChkTable Schema.SHEET_TELEMETRY, Schema.TABLE_TELEMETRY
+    ChkTable Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY
     ' Note: Log and History tables are per-site, created on-demand
 End Sub
 

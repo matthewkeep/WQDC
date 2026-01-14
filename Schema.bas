@@ -7,7 +7,6 @@ Option Explicit
 Public Const SHEET_INPUT As String = "Inputs"
 Public Const SHEET_LOG As String = "Log"
 Public Const SHEET_CHART As String = "Chart"
-Public Const SHEET_TELEMETRY As String = "Telemetry"
 Public Const SHEET_RESULTS As String = "Results"
 Public Const SHEET_CONFIG As String = "Config"
 Public Const SHEET_HISTORY As String = "RunHistory"

@@ -131,7 +131,7 @@ Private Function GetTelemTable() As ListObject
     ' Returns tblTelemetry or Nothing if not found
     Dim ws As Worksheet
     On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_TELEMETRY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     If Not ws Is Nothing Then
         Set GetTelemTable = ws.ListObjects(Schema.TABLE_TELEMETRY)
     End If
