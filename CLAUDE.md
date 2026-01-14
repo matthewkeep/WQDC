@@ -149,6 +149,7 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
   - Action column: "Current" (latest) or "Rollback" (older runs)
   - Load column: Click to restore settings without rollback
+- **Telemetry table:** Located on Results sheet at column L (tblTelemetry)
 - **Telemetry columns per site:** `EC (RP1)`, `Vol (RP1)` (Rain is global)
 - **RunId format:** `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
 - **Rollback:** Deletes future data, loads settings, auto-runs simulation
@@ -167,11 +168,11 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Enhanced Off → greys all Enhanced settings (N9:O22)
   - Rainfall Off → greys Rain Factor (N11:O11)
   - Mixing Model Simple → greys Tau, Surface Fraction, Hidden Mass (N13:O22)
-- **Double-click toggles:** Enabled, Telemetry Cal (On/Off), Pred Mode (Std/Enh)
+- **Double-click toggles:** Enabled, Telemetry Cal (On/Off), Pred Mode (Standard/Enhanced)
 
 ## Inputs Sheet Layout
 
-**J5:** Pred_Mode toggle (Std/Enh) - controls which result displays in Predicted row (Row 5)
+**J5:** Pred_Mode toggle (Standard/Enhanced) - controls which result displays in Predicted row (Row 5)
 
 **Column N-O (Enhanced Settings):**
 
@@ -191,7 +192,7 @@ O16-O22: Hidden mass values
 
 **Predicted Row (Row 5):**
 - B5: Volume, C5-I5: Chemistry metrics (Pred_Row named range)
-- J5: Pred_Mode toggle (Std/Enh) - double-click to switch
+- J5: Pred_Mode toggle (Standard/Enhanced) - double-click to switch
 - Triggered metric displays red + bold formatting
 
 ## History Table Actions
