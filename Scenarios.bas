@@ -70,16 +70,16 @@ Private Function BuildScenarios() As Scen()
 End Function
 
 Private Function RunOne(ByRef sc As Scen) As Boolean
-    Dim st As State, cfg As Config, r As Result
+    Dim s As State, cfg As Config, r As Result
     Dim ok As Boolean
 
-    st.Vol = sc.Vol: st.Chem(1) = sc.Chem: st.Hidden(1) = sc.HidMass: st.HidVol = 50
+    s.Vol = sc.Vol: s.Chem(1) = sc.Chem: s.Hidden(1) = sc.HidMass
     cfg.Mode = sc.Mode: cfg.Days = sc.Days
     cfg.Inflow = sc.Qin: cfg.Outflow = sc.Qout: cfg.InflowChem(1) = sc.ChemIn
     cfg.TriggerVol = sc.TrigVol: cfg.TriggerChem(1) = sc.TrigChem
     cfg.Tau = IIf(sc.Tau > 0, sc.Tau, 7): cfg.SurfaceFrac = 0.8
 
-    r = Sim.Run(st, cfg)
+    r = Sim.Run(s, cfg)
 
     ' Check result (TwoBucket gets +/-2 day tolerance)
     If sc.Mode = "TwoBucket" Then

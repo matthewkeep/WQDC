@@ -60,8 +60,8 @@ End Function
 Private Function TstSimpleVol() As Boolean
     Dim s As State, cfg As Config, n As State
     s.Vol = 100
-    cfg.Mode = "Simple": cfg.Inflow = 2: cfg.Outflow = 1: cfg.RainVol = 0.5
-    n = Modes.StepSimple(s, cfg)
+    cfg.Mode = "Simple": cfg.Inflow = 2: cfg.Outflow = 1
+    n = Modes.StepSimple(s, cfg, 0.5)  ' rainVol = 0.5
     TstSimpleVol = (Abs(n.Vol - 101.5) < 0.01)
 End Function
 
@@ -69,17 +69,17 @@ Private Function TstSimpleMass() As Boolean
     Dim s As State, cfg As Config, n As State
     s.Vol = 100: s.Chem(1) = 100
     cfg.Mode = "Simple": cfg.Inflow = 2: cfg.Outflow = 1: cfg.InflowChem(1) = 500
-    n = Modes.StepSimple(s, cfg)
+    n = Modes.StepSimple(s, cfg, 0)  ' rainVol = 0
     TstSimpleMass = (Abs(n.Chem(1) - 107.9) < 0.5)
 End Function
 
 Private Function TstTwoBucket() As Boolean
     Dim s As State, cfg As Config, n As State
     Dim massBefore As Double, massAfter As Double
-    s.Vol = 100: s.Chem(1) = 100: s.Hidden(1) = 10000: s.HidVol = 50
+    s.Vol = 100: s.Chem(1) = 100: s.Hidden(1) = 10000
     cfg.Mode = "TwoBucket": cfg.Tau = 7: cfg.SurfaceFrac = 0.8
     massBefore = s.Vol * s.Chem(1) + s.Hidden(1)
-    n = Modes.StepTwoBucket(s, cfg)
+    n = Modes.StepTwoBucket(s, cfg, 0)  ' rainVol = 0
     massAfter = n.Vol * n.Chem(1) + n.Hidden(1)
     TstTwoBucket = (Abs(massBefore - massAfter) < 0.01)
 End Function

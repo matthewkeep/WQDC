@@ -61,6 +61,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **WQOC.bas** | Entry point, orchestration, chart generation |
 | **Schema.bas** | Constants only (names, colors, defaults) |
 | **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, styling, range access) |
+| **Error.bas** | Centralized error handling (Trace, TraceErr, DEBUG_ON toggle) |
 | **Setup.bas** | Scaffolding, table creation, dropdowns, conditional formatting |
 | **Backtest.bas** | Season replay for A/B comparison |
 | **Tests.bas** | Smoke tests |
@@ -71,9 +72,9 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 ### Core Types
 
 ```vba
-Type State    ' Vol, Chem(1-7), Hidden(1-7), HidVol
+Type State    ' Vol, Chem(1-7), Hidden(1-7) - UDT, defaults to zeros
 Type Config   ' Site, Mode, Days, Tau, Inflow, Outflow, Triggers, RainfallMode, RainFactor, SurfaceFrac
-Type Result   ' TriggerDay, TriggerMetric, Snaps(), FinalState
+Type Result   ' TriggerDay, TriggerMetric, TriggerDate, Snaps(), FinalState
 ```
 
 ### Key Flows
@@ -99,11 +100,37 @@ Events.OnHistoryDoubleClick → History.LoadSettings → Writes to Inputs sheet
 
 ## Conventions
 
-**Variables:** `s` = State, `cfg` = Config, `r` = Result, `ws` = Worksheet, `tbl` = ListObject
+**Type Variables:**
+- `s` = State (input)
+- `n` = State (output/next in step functions)
+- `cfg` = Config
+- `r` = Result
+- `ws` = Worksheet
+- `tbl` = ListObject
+- `row` = ListRow
+- `rng` = Range
+
+**Loop/Index Variables:** `i`, `j`, `d` (day), `col` (column index)
+
+**Prefixes:** `p` = previous (e.g., `pVol`), `mix` = after mixing (e.g., `mixVol`)
 
 **Headers:** `Option Explicit` + `' Module: desc` + `' Dependencies: X, Y`
 
 **Helpers:** Use `Helpers.ColIdx`, `Helpers.GetSheet`, `Helpers.GetTable` (not Schema)
+
+**Error Handling:**
+```vba
+Public Sub DoWork()
+    On Error GoTo Fail
+    ' ... code ...
+    Exit Sub
+Fail:
+    Error.TraceErr "Module.DoWork"
+End Sub
+```
+- Use `Error.Trace "src", "msg"` for diagnostic logging
+- Use `Error.TraceErr "src"` in Fail handlers
+- Set `Error.DEBUG_ON = False` for production (silences all logging)
 
 ## Extending
 
@@ -202,3 +229,13 @@ O16-O22: Hidden mass values
 | Action ("Rollback") | Delete future runs, load settings, re-run simulation |
 | Action ("Current") | Shows message (can't rollback current) |
 | Load | Restore settings to Inputs sheet (no deletion, no run) |
+
+## Validation & Testing
+
+```vba
+Validate.Check           ' Returns True if structure valid (used before WQOC.Run)
+Validate.Report          ' Detailed validation report to Immediate window
+Tests.RunSmokeSuite      ' 10 smoke tests for core math
+Scenarios.RunAll         ' 6 regression scenarios
+Backtest.RunSeason       ' Season replay with A/B comparison (Std vs Enh)
+```

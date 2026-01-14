@@ -10,7 +10,6 @@ Public Type State
     Vol As Double
     Chem(1 To 7) As Double
     Hidden(1 To 7) As Double
-    HidVol As Double
 End Type
 
 Public Type Config
@@ -21,7 +20,6 @@ Public Type Config
     Tau As Double
     Inflow As Double
     Outflow As Double
-    RainVol As Double
     RainfallMode As String
     RainFactor As Double
     SurfaceFrac As Double
@@ -52,7 +50,7 @@ End Function
 
 Public Function CopyState(ByRef s As State) As State
     Dim c As State, i As Long
-    c.Vol = s.Vol: c.HidVol = s.HidVol
+    c.Vol = s.Vol
     For i = 1 To METRIC_COUNT: c.Chem(i) = s.Chem(i): c.Hidden(i) = s.Hidden(i): Next i
     CopyState = c
 End Function
@@ -66,4 +64,13 @@ Public Function InitHiddenAtEquilibrium(ByRef s As State) As State
         init.Hidden(i) = s.Vol * s.Chem(i)
     Next i
     InitHiddenAtEquilibrium = init
+End Function
+
+Public Function IsHiddenEmpty(ByRef s As State) As Boolean
+    ' Returns True if hidden layer has no values (all indices near zero)
+    Dim i As Long
+    For i = 1 To METRIC_COUNT
+        If s.Hidden(i) > EPS Then Exit Function
+    Next i
+    IsHiddenEmpty = True
 End Function

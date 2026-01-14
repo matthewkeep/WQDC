@@ -7,15 +7,24 @@ Option Explicit
 
 Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As String, ByVal site As String)
     ' Records run metadata to site's history table. RunId must match SimLog entry.
-    ' New columns (RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor) for config versioning
-    Dim tbl As ListObject, row As ListRow, i As Long, actionCol As Long, loadCol As Long
+    Dim tbl As ListObject, row As ListRow, i As Long
+    Dim idCol As Long, tsCol As Long, dateCol As Long, daysCol As Long, modeCol As Long
+    Dim actionCol As Long, loadCol As Long
+
+    On Error GoTo Fail
 
     Set tbl = GetHistoryTable(site)
-    If tbl Is Nothing Then Exit Sub
+    If tbl Is Nothing Then Error.Trace "History.RecordRun", "No history table": Exit Sub
 
+    ' Get column indices
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
+    tsCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_TIMESTAMP)
+    dateCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNDATE)
+    daysCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_DAYS)
+    modeCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_MODE)
     actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
-    If actionCol = 0 Then Exit Sub
+    If idCol = 0 Or actionCol = 0 Then Error.Trace "History.RecordRun", "Missing columns": Exit Sub
 
     ' Update existing rows' action to "Rollback" and ensure Load is set
     If Not tbl.DataBodyRange Is Nothing Then
@@ -32,12 +41,12 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
     Set row = tbl.ListRows.Add: If row Is Nothing Then Exit Sub
 
     With row.Range
-        .Cells(1, 1).Value = runId
-        .Cells(1, 2).Value = Now
-        .Cells(1, 3).Value = cfg.StartDate
-        .Cells(1, 4).Value = cfg.Days
-        .Cells(1, 5).Value = cfg.Mode
-        ' New config columns - write if columns exist (backward compatibility)
+        .Cells(1, idCol).Value = runId
+        If tsCol > 0 Then .Cells(1, tsCol).Value = Now
+        If dateCol > 0 Then .Cells(1, dateCol).Value = cfg.StartDate
+        If daysCol > 0 Then .Cells(1, daysCol).Value = cfg.Days
+        If modeCol > 0 Then .Cells(1, modeCol).Value = cfg.Mode
+        ' Config columns - write if columns exist
         WriteColIfExists tbl, row, "RainfallMode", cfg.RainfallMode
         WriteColIfExists tbl, row, "TelemCal", IIf(Data.GetTelemCalEnabled(), "On", "Off")
         WriteColIfExists tbl, row, "Tau", cfg.Tau
@@ -52,6 +61,10 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
             Helpers.StyleActionCell .Cells(1, loadCol)
         End If
     End With
+    Exit Sub
+
+Fail:
+    Error.TraceErr "History.RecordRun"
 End Sub
 
 Private Sub WriteColIfExists(ByVal tbl As ListObject, ByVal row As ListRow, ByVal colName As String, ByVal v As Variant)
@@ -72,14 +85,18 @@ Public Function LoadSettings(ByVal runId As String, ByVal site As String) As Boo
     ' Restores config from history row to Inputs sheet (no deletion, no run)
     ' Setting Sample Date triggers hidden mass load via Events.OnInputsChange
     Dim tbl As ListObject, ws As Worksheet, i As Long, rowIdx As Long
+    Dim idCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
+    If idCol = 0 Then Exit Function
+
     ' Find row by RunId
     For i = 1 To tbl.ListRows.Count
-        If tbl.DataBodyRange.Cells(i, 1).Value = runId Then
+        If tbl.DataBodyRange.Cells(i, idCol).Value = runId Then
             rowIdx = i
             Exit For
         End If
@@ -91,8 +108,8 @@ Public Function LoadSettings(ByVal runId As String, ByVal site As String) As Boo
 
     ' Restore settings to Inputs sheet
     On Error Resume Next
-    ws.Range(Schema.NAME_SAMPLE_DATE).Value = tbl.DataBodyRange.Cells(rowIdx, 3).Value  ' RunDate
-    ws.Range(Schema.NAME_MIXING_MODEL).Value = tbl.DataBodyRange.Cells(rowIdx, 5).Value  ' Mode
+    ws.Range(Schema.NAME_SAMPLE_DATE).Value = ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_RUNDATE)
+    ws.Range(Schema.NAME_MIXING_MODEL).Value = ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_MODE)
     ws.Range(Schema.NAME_RAINFALL_MODE).Value = ReadColIfExists(tbl, rowIdx, "RainfallMode")
     ws.Range(Schema.NAME_TELEM_CAL).Value = ReadColIfExists(tbl, rowIdx, "TelemCal")
     ws.Range(Schema.NAME_TAU).Value = ReadColIfExists(tbl, rowIdx, "Tau")
@@ -127,19 +144,23 @@ End Function
 Public Function RollbackLast(ByVal site As String) As Boolean
     ' Deletes last run from history AND log entries after that run's start date
     Dim tbl As ListObject, startDate As Date
+    Dim dateCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
-    ' Get start date of last run (column 3 = RunDate)
-    startDate = tbl.ListRows(tbl.ListRows.Count).Range.Cells(1, 3).Value
+    dateCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNDATE)
+    If dateCol = 0 Then Exit Function
+
+    ' Get start date of last run
+    startDate = tbl.ListRows(tbl.ListRows.Count).Range.Cells(1, dateCol).Value
 
     ' Delete log entries after the previous run's start date
     If tbl.ListRows.Count > 1 Then
         ' Roll back to previous run's end date
         Dim prevStartDate As Date
-        prevStartDate = tbl.ListRows(tbl.ListRows.Count - 1).Range.Cells(1, 3).Value
+        prevStartDate = tbl.ListRows(tbl.ListRows.Count - 1).Range.Cells(1, dateCol).Value
         SimLog.DeleteAfterDate prevStartDate, site
     Else
         ' Last run - delete all log entries before this run
@@ -165,19 +186,24 @@ Public Function RollbackTo(ByVal targetRunId As String, ByVal site As String) As
     ' Deletes all runs AFTER targetRunId for site (Jenga model)
     ' Returns count of runs removed
     Dim tbl As ListObject
-    Dim runId As String, i As Long, targetIdx As Long, removed As Long
+    Dim i As Long, targetIdx As Long, removed As Long
     Dim targetStartDate As Date
+    Dim idCol As Long, dateCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
+    dateCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNDATE)
+    If idCol = 0 Or dateCol = 0 Then Exit Function
+
     ' Find the target run to get its start date
     targetIdx = 0
     For i = 1 To tbl.ListRows.Count
-        If tbl.ListRows(i).Range.Cells(1, 1).Value = targetRunId Then
+        If tbl.ListRows(i).Range.Cells(1, idCol).Value = targetRunId Then
             targetIdx = i
-            targetStartDate = tbl.ListRows(i).Range.Cells(1, 3).Value  ' RunDate column
+            targetStartDate = tbl.ListRows(i).Range.Cells(1, dateCol).Value
             Exit For
         End If
     Next i
@@ -211,22 +237,28 @@ Public Function GetRunHistory(ByVal site As String) As Variant
     ' Each row: (RunId, Timestamp, StartDate, TriggerDay, TriggerMetric)
     Dim tbl As ListObject
     Dim result() As Variant, i As Long
+    Dim idCol As Long, tsCol As Long, dateCol As Long
     Dim trigDayCol As Long, trigMetricCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
-    ' Get column indices (handles old and new table layouts)
+    ' Get column indices
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
+    tsCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_TIMESTAMP)
+    dateCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNDATE)
     trigDayCol = Helpers.ColIdx(tbl, "TriggerDay")
     trigMetricCol = Helpers.ColIdx(tbl, "TriggerMetric")
+
+    If idCol = 0 Or tsCol = 0 Or dateCol = 0 Then Exit Function
 
     ' Build result array
     ReDim result(1 To tbl.ListRows.Count, 1 To 5)
     For i = 1 To tbl.ListRows.Count
-        result(i, 1) = tbl.ListRows(i).Range.Cells(1, 1).Value  ' RunId
-        result(i, 2) = tbl.ListRows(i).Range.Cells(1, 2).Value  ' Timestamp
-        result(i, 3) = tbl.ListRows(i).Range.Cells(1, 3).Value  ' StartDate
+        result(i, 1) = tbl.ListRows(i).Range.Cells(1, idCol).Value
+        result(i, 2) = tbl.ListRows(i).Range.Cells(1, tsCol).Value
+        result(i, 3) = tbl.ListRows(i).Range.Cells(1, dateCol).Value
         If trigDayCol > 0 Then result(i, 4) = tbl.ListRows(i).Range.Cells(1, trigDayCol).Value
         If trigMetricCol > 0 Then result(i, 5) = tbl.ListRows(i).Range.Cells(1, trigMetricCol).Value
     Next i

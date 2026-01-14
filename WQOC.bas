@@ -35,6 +35,18 @@ Public Sub Run()
     s = Data.LoadState()
     cfgStd = Data.LoadConfig(site, "Standard")
 
+    ' Validate state
+    If s.Vol < Core.EPS Then
+        MsgBox "Initial volume must be greater than 0.", vbExclamation, "WQOC"
+        GoTo Cleanup
+    End If
+
+    ' Validate config
+    If cfgStd.Days < 1 Then
+        MsgBox "Forecast days must be at least 1.", vbExclamation, "WQOC"
+        GoTo Cleanup
+    End If
+
     ' Safety check: warn if running from a date earlier than existing log data
     latestDate = SimLog.GetLatestLogDate(site)
     If latestDate > 0 And cfgStd.StartDate < latestDate Then
@@ -70,12 +82,12 @@ Public Sub Run()
         ' Priority: 1) Log at sample date, 2) Inputs sheet, 3) Initialize at equilibrium
         If cfgEnh.Mode = "TwoBucket" Then
             logState = Data.LoadHiddenFromLog(site, cfgEnh.StartDate)
-            If logState.Hidden(1) > Core.EPS Then
+            If Not Core.IsHiddenEmpty(logState) Then
                 ' Found hidden state in log - use it
                 For i = 1 To Core.METRIC_COUNT
                     s.Hidden(i) = logState.Hidden(i)
                 Next i
-            ElseIf IsHiddenUninitialized(s) Then
+            ElseIf Core.IsHiddenEmpty(s) Then
                 ' No log data and Inputs sheet empty - initialize at equilibrium
                 s = Core.InitHiddenAtEquilibrium(s)
             End If
@@ -102,6 +114,7 @@ Cleanup:
     Application.ScreenUpdating = True
     Application.EnableEvents = True
     If Err.Number <> 0 Then
+        Error.TraceErr "WQOC.Run"
         MsgBox "Error: " & Err.Description, vbExclamation, "WQOC"
     End If
 End Sub
@@ -171,18 +184,18 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
     Set wsChart = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
     Set wsLog = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
     On Error GoTo 0
-    If wsChart Is Nothing Then Exit Sub
-    If wsLog Is Nothing Then Exit Sub
+    If wsChart Is Nothing Then Error.Trace "GenerateCharts", "Chart sheet missing": Exit Sub
+    If wsLog Is Nothing Then Error.Trace "GenerateCharts", "Log sheet missing": Exit Sub
 
     ' Get live table for site
     On Error Resume Next
     Set tbl = wsLog.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If tbl Is Nothing Then Error.Trace "GenerateCharts", "No live table for " & site: Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Error.Trace "GenerateCharts", "Empty live table": Exit Sub
 
     n = tbl.ListRows.Count
-    If n < 1 Then Exit Sub
+    If n < 1 Then Error.Trace "GenerateCharts", "No data rows": Exit Sub
 
     ' Get volume column indices
     stdVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
@@ -334,7 +347,7 @@ End Sub
 
 Public Sub TestTwoBucket()
     Dim s As State, cfg As Config, r As Result
-    s.Vol = 100: s.HidVol = 50: s.Chem(1) = 200: s.Hidden(1) = 5000
+    s.Vol = 100: s.Chem(1) = 200: s.Hidden(1) = 5000
     cfg.Mode = "TwoBucket": cfg.Days = 30: cfg.Tau = 7
     cfg.Inflow = 2: cfg.Outflow = 1: cfg.TriggerChem(1) = 300
     r = Sim.Run(s, cfg)
@@ -347,9 +360,3 @@ Public Sub TestTwoBucket()
     End If
 End Sub
 
-' ==== Hidden Layer Helpers ===================================================
-
-Private Function IsHiddenUninitialized(ByRef s As State) As Boolean
-    ' Returns True if hidden layer has not been initialized (first Enhanced run)
-    IsHiddenUninitialized = (s.Hidden(1) < Core.EPS)
-End Function

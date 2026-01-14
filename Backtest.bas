@@ -151,7 +151,6 @@ Private Function CarryHiddenFromPrevious(ByRef current As State, ByRef previous 
     For i = 1 To Core.METRIC_COUNT
         result.Hidden(i) = previous.Hidden(i)
     Next i
-    result.HidVol = previous.HidVol
     CarryHiddenFromPrevious = result
 End Function
 

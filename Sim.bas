@@ -4,7 +4,9 @@ Option Explicit
 
 Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Dim r As Result, s As State, d As Long
-    Dim currentDate As Date
+    Dim currentDate As Date, dayRain As Double
+
+    On Error GoTo Fail
 
     s = Core.CopyState(init)
     r.TriggerDay = Core.NO_TRIGGER
@@ -14,10 +16,10 @@ Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     For d = 1 To cfg.Days
         currentDate = cfg.StartDate + d
 
-        ' Apply per-day rainfall if enabled
-        cfg.RainVol = GetRainForDay(currentDate, cfg)
+        ' Get per-day rainfall (local variable, cfg not mutated)
+        dayRain = GetRainForDay(currentDate, cfg)
 
-        s = Modes.Step(s, cfg)
+        s = Modes.Step(s, cfg, dayRain)
         r.Snaps(d) = s
         If r.TriggerDay = Core.NO_TRIGGER Then
             If ChkTriggers(s, cfg, r.TriggerMetric) Then
@@ -28,6 +30,12 @@ Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Next d
 
     r.FinalState = s
+    Run = r
+    Exit Function
+
+Fail:
+    Error.TraceErr "Sim.Run"
+    r.TriggerDay = Core.NO_TRIGGER
     Run = r
 End Function
 
@@ -47,7 +55,7 @@ Private Function GetRainForDay(ByVal d As Date, ByRef cfg As Config) As Double
         rainMM = Telemetry.GetRainForDate(d)
     ElseIf UCase$(cfg.RainfallMode) = UCase$(Schema.RAINFALL_FULL) Then
         ' Forecast with typical: average daily rain from hindcast period
-        hindcastDays = Date - cfg.StartDate
+        hindcastDays = Date - cfg.StartDate + 1  ' Inclusive count to match GetTotalRain
         If hindcastDays > 0 Then
             avgRain = Telemetry.GetTotalRain(cfg.StartDate, Date) / hindcastDays
         Else

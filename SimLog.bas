@@ -11,11 +11,17 @@ Option Explicit
 Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
     ' UPSERT to site's live table - creates/updates rows by date
     ' Detects Standard vs Enhanced from runId prefix (STD- or ENH-)
+    On Error GoTo Fail
+
     If Left$(runId, 3) = "STD" Then
         WriteLiveStandard r, cfg, runId, site
     Else
         WriteLiveEnhanced r, cfg, runId, site
     End If
+    Exit Sub
+
+Fail:
+    Error.TraceErr "SimLog.WriteLog"
 End Sub
 
 Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)

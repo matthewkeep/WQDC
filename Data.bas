@@ -110,9 +110,10 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
     cfg.StartDate = Helpers.GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
     cfg.Tau = Val(Helpers.ReadFromRange(ws, Schema.NAME_TAU))
+    If cfg.Tau < Core.EPS Then cfg.Tau = 7  ' Default 7 days for TwoBucket mixing
     cfg.Outflow = Val(Helpers.ReadFromRange(ws, Schema.NAME_OUTPUT))
     cfg.SurfaceFrac = Val(Helpers.ReadFromRange(ws, Schema.NAME_SURFACE_FRACTION))
-    If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
+    If cfg.SurfaceFrac < Core.EPS Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
 
     ' Load inflows
     LoadInflowIR ws, cfg
@@ -250,15 +251,9 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
         End If
     End If
 
-    ' Enhanced: always save hidden mass for TwoBucket continuity between runs
-    If UCase$(runType) = "ENHANCED" Then
-        Set rng = Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS)
-        If Not rng Is Nothing Then
-            For i = 1 To Core.METRIC_COUNT
-                If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = predState.Hidden(i)
-            Next i
-        End If
-    End If
+    ' Hidden mass NOT written to Inputs - would corrupt sample-date state with end-of-run values.
+    ' Continuity handled via tblLive (SimLog stores Hidden per-date).
+    ' Inputs updates when Sample Date changes (Events.OnInputsChange → LoadHiddenForDate).
     On Error GoTo 0
 End Sub
 
@@ -350,7 +345,7 @@ Public Sub LoadHiddenForDate(ByVal site As String, ByVal targetDate As Date)
     If Len(site) = 0 Or targetDate = 0 Then Exit Sub
 
     s = LoadHiddenFromLog(site, targetDate)
-    If s.Hidden(1) < Core.EPS Then Exit Sub  ' No data found
+    If Core.IsHiddenEmpty(s) Then Exit Sub  ' No data found
 
     Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub

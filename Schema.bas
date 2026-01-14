@@ -66,6 +66,11 @@ Public Const IR_COL_SAMPLE_DATE As String = "Sample Date"
 Public Const IR_COL_ACTION As String = "Add Input"
 
 ' History table columns
+Public Const HISTORY_COL_RUNID As String = "RunId"
+Public Const HISTORY_COL_TIMESTAMP As String = "Timestamp"
+Public Const HISTORY_COL_RUNDATE As String = "RunDate"
+Public Const HISTORY_COL_DAYS As String = "Days"
+Public Const HISTORY_COL_MODE As String = "Mode"
 Public Const HISTORY_COL_ACTION As String = "Action"
 Public Const HISTORY_COL_LOAD As String = "Load"
 

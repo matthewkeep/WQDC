@@ -2,24 +2,26 @@ Option Explicit
 ' Modes: Simulation step functions.
 ' Dependencies: Core
 
-Public Function Step(ByRef s As State, ByRef cfg As Config) As State
+Public Function Step(ByRef s As State, ByRef cfg As Config, ByVal rainVol As Double) As State
     Select Case UCase$(cfg.Mode)
-        Case "SIMPLE": Step = StepSimple(s, cfg)
-        Case "TWOBUCKET": Step = StepTwoBucket(s, cfg)
-        Case Else: Step = StepSimple(s, cfg)
+        Case "SIMPLE": Step = StepSimple(s, cfg, rainVol)
+        Case "TWOBUCKET": Step = StepTwoBucket(s, cfg, rainVol)
+        Case Else: Step = StepSimple(s, cfg, rainVol)
     End Select
 End Function
 
 ' ==== Simple Mode ============================================================
 
-Public Function StepSimple(ByRef s As State, ByRef cfg As Config) As State
+Public Function StepSimple(ByRef s As State, ByRef cfg As Config, ByVal rainVol As Double) As State
     Dim n As State, i As Long, pVol As Double, mOut As Double, mIn As Double
+
+    On Error GoTo Fail
 
     n = Core.CopyState(s)
     pVol = s.Vol
 
     ' Volume: in + rain - out
-    n.Vol = pVol + cfg.Inflow + cfg.RainVol - cfg.Outflow
+    n.Vol = pVol + cfg.Inflow + rainVol - cfg.Outflow
     If n.Vol < 0 Then n.Vol = 0
 
     ' Mass balance per metric
@@ -34,22 +36,30 @@ Public Function StepSimple(ByRef s As State, ByRef cfg As Config) As State
     Next i
 
     StepSimple = n
+    Exit Function
+
+Fail:
+    Error.TraceErr "Modes.StepSimple"
+    StepSimple = s  ' Return unchanged state on error
 End Function
 
 ' ==== TwoBucket Mode =========================================================
 
-Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
+Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config, ByVal rainVol As Double) As State
     Dim n As State, i As Long
-    Dim pVol As Double, alpha As Double, sf As Double
+    Dim pVol As Double, mixVol As Double, alpha As Double, sf As Double
     Dim visMass As Double, hidMass As Double, mixUp As Double, mixDn As Double
+
+    On Error GoTo Fail
 
     n = Core.CopyState(s)
     pVol = s.Vol
     alpha = IIf(cfg.Tau > Core.EPS, 1 - Exp(-1 / cfg.Tau), 0.1)
     sf = IIf(cfg.SurfaceFrac > 0, cfg.SurfaceFrac, 0.8)
 
-    ' Volume: surface layer gets inflow/rain, loses outflow
-    n.Vol = pVol + cfg.Inflow * sf + cfg.RainVol - cfg.Outflow
+    ' Volume: inflow/rain first, then outflow
+    mixVol = pVol + cfg.Inflow * sf + rainVol
+    n.Vol = mixVol - cfg.Outflow
     If n.Vol < 0 Then n.Vol = 0
 
     ' Chemistry: mix between visible and hidden layers
@@ -68,8 +78,8 @@ Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
         visMass = visMass + cfg.Inflow * cfg.InflowChem(i) * sf
 
         ' Outflow removes from visible
-        If pVol > Core.EPS Then
-            visMass = visMass - cfg.Outflow * (visMass / pVol)
+        If mixVol > Core.EPS Then
+            visMass = visMass - cfg.Outflow * (visMass / mixVol)
         End If
 
         ' Update concentrations
@@ -78,4 +88,9 @@ Public Function StepTwoBucket(ByRef s As State, ByRef cfg As Config) As State
     Next i
 
     StepTwoBucket = n
+    Exit Function
+
+Fail:
+    Error.TraceErr "Modes.StepTwoBucket"
+    StepTwoBucket = s  ' Return unchanged state on error
 End Function
