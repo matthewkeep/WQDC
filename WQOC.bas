@@ -1,6 +1,6 @@
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
-' Dependencies: Core, Data, Sim, History, SimLog, Schema, Setup, Validate
+' Dependencies: Core, Data, Sim, Storage, Schema, Setup, Validate
 
 Public Sub Run()
     ' Main entry point - runs Standard, optionally Enhanced, generates charts
@@ -62,9 +62,7 @@ Public Sub Run()
     ' Run Standard simulation
     rStd = Sim.Run(s, cfgStd)
     runIdStd = MakeRunId("STD", site)
-    SimLog.WriteLog rStd, cfgStd, runIdStd, site
-    History.RecordRun cfgStd, rStd, runIdStd, site
-    Data.SaveResult rStd, "Standard"
+    Storage.SaveRun Storage.CreateRecord(runIdStd, site, "Standard", cfgStd, rStd)
 
     ' Check if Enhanced mode is enabled
     enhancedMode = (UCase$(Data.GetEnhancedMode()) = "ON")
@@ -96,9 +94,7 @@ Public Sub Run()
 
         rEnh = Sim.Run(s, cfgEnh)
         runIdEnh = MakeRunId("ENH", site)
-        SimLog.WriteLog rEnh, cfgEnh, runIdEnh, site
-        History.RecordRun cfgEnh, rEnh, runIdEnh, site
-        Data.SaveResult rEnh, "Enhanced"
+        Storage.SaveRun Storage.CreateRecord(runIdEnh, site, "Enhanced", cfgEnh, rEnh)
     End If
 
     ' Generate charts for site

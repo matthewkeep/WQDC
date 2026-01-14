@@ -56,6 +56,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **Telemetry.bas** | Telemetry data access (Rain, EC, Vol) |
 | **History.bas** | Audit trail, rollback, LoadSettings (restore config) |
 | **SimLog.bas** | Date-centric live log (UPSERT to tblLive) |
+| **Storage.bas** | Consolidated persistence (SaveRun writes to all 3 destinations) |
 | **Loader.bas** | Site selection, IR/chemistry population |
 | **Events.bas** | Worksheet handlers, double-click toggles, action dispatching |
 | **EventBus.bas** | Centralized event dispatch (SampleDateChanged, SiteChanged) |
