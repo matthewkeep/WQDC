@@ -20,11 +20,6 @@ Public Function LiveTableName(ByVal site As String) As String
     LiveTableName = Schema.LIVE_TABLE_PREFIX & site
 End Function
 
-Public Function EnhHidColName(ByVal idx As Long) As String
-    ' Returns hidden layer column name (e.g., "EnhHid1", "EnhHid2", ...)
-    EnhHidColName = "EnhHid" & idx
-End Function
-
 Public Function HistoryTableName(ByVal site As String) As String
     ' Returns table name for site's history table (e.g., "tblHistory_RP1")
     HistoryTableName = Schema.HISTORY_TABLE_PREFIX & site
@@ -70,6 +65,16 @@ Public Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
     MatchesSite = (UCase$(Trim$(CStr(v))) = UCase$(Trim$(site)))
 End Function
 
+Public Function FindRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
+    ' Returns row index (1-based) for date in first column, or 0 if not found
+    ' Uses O(1) MATCH instead of O(n) loop
+    Dim rowIdx As Variant
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    rowIdx = Application.Match(CDbl(targetDate), tbl.ListColumns(1).DataBodyRange, 0)
+    If Not IsError(rowIdx) Then FindRowByDate = CLng(rowIdx)
+End Function
+
 ' ==== Action Cell Styling =======================================================
 
 Public Sub StyleActionCell(ByVal cell As Range)
@@ -111,4 +116,18 @@ Public Function ReadFromRange(ByVal ws As Worksheet, ByVal nm As String) As Vari
     Dim rng As Range
     Set rng = GetRng(ws, nm)
     If Not rng Is Nothing Then ReadFromRange = rng.Value
+End Function
+
+Public Function GetDateVal(ByVal ws As Worksheet, ByVal nm As String) As Date
+    ' Returns date value from named range, or 0 if invalid/empty
+    Dim rng As Range, v As Variant
+    Set rng = GetRng(ws, nm)
+    If rng Is Nothing Then Exit Function
+    v = rng.Value
+    If IsEmpty(v) Then Exit Function
+    If IsDate(v) Then
+        GetDateVal = CDate(v)
+    ElseIf IsNumeric(v) And v > 0 Then
+        GetDateVal = CDate(v)  ' Excel serial date number
+    End If
 End Function

@@ -34,16 +34,16 @@ Public Function LoadState() As State
     Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
-    s.Vol = Val(GetVal(ws, Schema.NAME_INIT_VOL))
+    s.Vol = Val(Helpers.ReadFromRange(ws, Schema.NAME_INIT_VOL))
 
-    Set rng = GetRng(ws, Schema.NAME_RES_ROW)
+    Set rng = Helpers.GetRng(ws, Schema.NAME_RES_ROW)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
             If i <= rng.Columns.Count Then s.Chem(i) = Val(rng.Cells(1, i).Value)
         Next i
     End If
 
-    Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
+    Set rng = Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
             If i <= rng.Rows.Count Then s.Hidden(i) = Val(rng.Cells(i, 1).Value)
@@ -96,18 +96,18 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     ' Common config
     cfg.Site = site
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
-    cfg.StartDate = GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
-    cfg.Tau = Val(GetVal(ws, Schema.NAME_TAU))
-    cfg.Outflow = Val(GetVal(ws, Schema.NAME_OUTPUT))
-    cfg.SurfaceFrac = Val(GetVal(ws, Schema.NAME_SURFACE_FRACTION))
+    cfg.StartDate = Helpers.GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
+    cfg.Tau = Val(Helpers.ReadFromRange(ws, Schema.NAME_TAU))
+    cfg.Outflow = Val(Helpers.ReadFromRange(ws, Schema.NAME_OUTPUT))
+    cfg.SurfaceFrac = Val(Helpers.ReadFromRange(ws, Schema.NAME_SURFACE_FRACTION))
     If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
 
     ' Load inflows
     LoadInflowIR ws, cfg
 
     ' Load triggers
-    cfg.TriggerVol = Val(GetVal(ws, Schema.NAME_TRIGGER_VOL))
-    Set rng = GetRng(ws, Schema.NAME_LIMIT_ROW)
+    cfg.TriggerVol = Val(Helpers.ReadFromRange(ws, Schema.NAME_TRIGGER_VOL))
+    Set rng = Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW)
     If Not rng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
             If i <= rng.Columns.Count Then cfg.TriggerChem(i) = Val(rng.Cells(1, i).Value)
@@ -117,9 +117,9 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     ' Mode-specific settings
     If UCase$(runType) = "ENHANCED" Then
         ' Enhanced: read configured options
-        mixingModel = GetVal(ws, Schema.NAME_MIXING_MODEL)
-        rainfallMode = GetVal(ws, Schema.NAME_RAINFALL_MODE)
-        telemCal = GetVal(ws, Schema.NAME_TELEM_CAL)
+        mixingModel = CStr(Helpers.ReadFromRange(ws, Schema.NAME_MIXING_MODEL))
+        rainfallMode = CStr(Helpers.ReadFromRange(ws, Schema.NAME_RAINFALL_MODE))
+        telemCal = CStr(Helpers.ReadFromRange(ws, Schema.NAME_TELEM_CAL))
 
         ' Set mixing model
         If UCase$(mixingModel) = UCase$(Schema.MIXING_TWOBUCKET) Then
@@ -132,7 +132,7 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
         cfg.RainfallMode = rainfallMode
 
         ' Load rain factor (mm to ML conversion)
-        cfg.RainFactor = Val(GetVal(ws, Schema.NAME_RAIN_FACTOR))
+        cfg.RainFactor = Val(Helpers.ReadFromRange(ws, Schema.NAME_RAIN_FACTOR))
         If cfg.RainFactor = 0 Then cfg.RainFactor = 1  ' Default 1:1
     Else
         ' Standard: Simple mode, no rainfall, no calibration
@@ -200,8 +200,8 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     End If
 
     ' Calculate days from Run Date (today), not Sample Date
-    sampleDate = GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
-    runDate = GetDateVal(ws, Schema.NAME_RUN_DATE)
+    sampleDate = Helpers.GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
+    runDate = Helpers.GetDateVal(ws, Schema.NAME_RUN_DATE)
     dayOffset = CLng(runDate - sampleDate)
 
     Dim days As Long
@@ -217,12 +217,12 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     Else
         targetName = Schema.NAME_STD_TRIGGER
     End If
-    SetVal ws, targetName, days
+    Helpers.WriteToRange ws, targetName, days
 
     ' Standard: update predicted row only (no hidden layer in Simple mode)
     If UCase$(runType) = "STANDARD" Then
-        SetVal ws, Schema.NAME_RESULT_VOL, predState.Vol
-        Set rng = GetRng(ws, Schema.NAME_PRED_ROW)
+        Helpers.WriteToRange ws, Schema.NAME_RESULT_VOL, predState.Vol
+        Set rng = Helpers.GetRng(ws, Schema.NAME_PRED_ROW)
         If Not rng Is Nothing Then
             For i = 1 To Core.METRIC_COUNT
                 If i <= rng.Columns.Count Then rng.Cells(1, i).Value = predState.Chem(i)
@@ -232,7 +232,7 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
 
     ' Enhanced: save hidden mass for TwoBucket continuity between runs
     If UCase$(runType) = "ENHANCED" Then
-        Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
+        Set rng = Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS)
         If Not rng Is Nothing Then
             For i = 1 To Core.METRIC_COUNT
                 If i <= rng.Rows.Count Then rng.Cells(i, 1).Value = predState.Hidden(i)
@@ -242,39 +242,7 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     On Error GoTo 0
 End Sub
 
-' ==== Helpers ================================================================
-
-Private Function GetRng(ByVal ws As Worksheet, ByVal nm As String) As Range
-    On Error Resume Next
-    Set GetRng = ws.Range(nm)
-    On Error GoTo 0
-End Function
-
-Private Function GetVal(ByVal ws As Worksheet, ByVal nm As String) As String
-    Dim rng As Range
-    Set rng = GetRng(ws, nm)
-    If Not rng Is Nothing Then GetVal = CStr(rng.Value)
-End Function
-
-Private Function GetDateVal(ByVal ws As Worksheet, ByVal nm As String) As Date
-    ' Returns date value from named range, or 0 if invalid/empty
-    Dim rng As Range, v As Variant
-    Set rng = GetRng(ws, nm)
-    If rng Is Nothing Then Exit Function
-    v = rng.Value
-    If IsEmpty(v) Then Exit Function
-    If IsDate(v) Then
-        GetDateVal = CDate(v)
-    ElseIf IsNumeric(v) And v > 0 Then
-        GetDateVal = CDate(v)  ' Excel serial date number
-    End If
-End Function
-
-Private Sub SetVal(ByVal ws As Worksheet, ByVal nm As String, ByVal v As Variant)
-    Dim rng As Range
-    Set rng = GetRng(ws, nm)
-    If Not rng Is Nothing Then rng.Value = v
-End Sub
+' ==== Private Helpers ========================================================
 
 Private Function IsActive(ByVal v As Variant) As Boolean
     Dim s As String
@@ -310,7 +278,7 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
 
     ' Read hidden layer values
     For i = 1 To Core.METRIC_COUNT
-        hidCol = Helpers.ColIdx(tbl, Helpers.EnhHidColName(i))
+        hidCol = Helpers.ColIdx(tbl, Schema.EnhHidColName(i))
         If hidCol > 0 Then
             s.Hidden(i) = Val(tbl.DataBodyRange.Cells(rowIdx, hidCol).Value)
         End If
@@ -332,9 +300,7 @@ Public Sub LoadHiddenForDate(ByVal site As String, ByVal targetDate As Date)
     Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
-    On Error Resume Next
-    Set rng = ws.Range(Schema.NAME_HIDDEN_MASS)
-    On Error GoTo 0
+    Set rng = Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS)
     If rng Is Nothing Then Exit Sub
 
     For i = 1 To Core.METRIC_COUNT
@@ -362,12 +328,6 @@ End Function
 
 Private Function FindLogRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
     ' Returns row index (1-based) for date in log table, or 0 if not found
-    Dim i As Long
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    For i = 1 To tbl.ListRows.Count
-        If CDate(tbl.DataBodyRange.Cells(i, 1).Value) = targetDate Then
-            FindLogRowByDate = i
-            Exit Function
-        End If
-    Next i
+    ' Delegates to shared O(1) utility
+    FindLogRowByDate = Helpers.FindRowByDate(tbl, targetDate)
 End Function

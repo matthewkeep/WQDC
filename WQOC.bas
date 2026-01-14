@@ -151,18 +151,21 @@ End Function
 ' ==== Chart Generation =======================================================
 
 Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd As Result, ByRef rEnh As Result, ByVal hasEnhanced As Boolean)
-    ' Draws charts from tblLive - shows full season timeline
-    ' Standard solid, Enhanced dashed, Trigger threshold
+    ' Generates 7 dual-axis charts (one per chemistry metric)
+    ' Each chart: Chemistry on left Y-axis, Volume on right Y-axis
+    ' Styling: Std=Blue, Enh=Teal, Chemistry=Solid, Volume=Dashed
     Dim wsChart As Worksheet, wsLog As Worksheet
     Dim tbl As ListObject
     Dim cht As ChartObject
-    Dim n As Long, i As Long
+    Dim n As Long, i As Long, chemIdx As Long
     Dim dates() As Date, volStd() As Double, volEnh() As Double
-    Dim ecStd() As Double, ecEnh() As Double
+    Dim chemStd() As Double, chemEnh() As Double
     Dim trigArr() As Double
-    Dim dateCol As Long, stdVolCol As Long, stdECCol As Long
-    Dim enhVolCol As Long, enhECCol As Long
+    Dim stdVolCol As Long, enhVolCol As Long
+    Dim stdChemCol As Long, enhChemCol As Long
     Dim hasEnhData As Boolean
+    Dim chartTop As Double
+    Dim chemName As String, chemUnit As String
 
     On Error Resume Next
     Set wsChart = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
@@ -181,120 +184,136 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
     n = tbl.ListRows.Count
     If n < 1 Then Exit Sub
 
-    ' Get column indices
-    dateCol = 1  ' Date is always first column
+    ' Get volume column indices
     stdVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
-    stdECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
     enhVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
-    enhECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
 
-    ' Build arrays from live table
+    ' Build date and volume arrays (shared across all charts)
     ReDim dates(1 To n)
     ReDim volStd(1 To n)
-    ReDim ecStd(1 To n)
     ReDim volEnh(1 To n)
-    ReDim ecEnh(1 To n)
 
     For i = 1 To n
-        dates(i) = tbl.DataBodyRange.Cells(i, dateCol).Value
+        dates(i) = tbl.DataBodyRange.Cells(i, 1).Value
         If stdVolCol > 0 Then volStd(i) = Val(tbl.DataBodyRange.Cells(i, stdVolCol).Value)
-        If stdECCol > 0 Then ecStd(i) = Val(tbl.DataBodyRange.Cells(i, stdECCol).Value)
         If enhVolCol > 0 Then
             volEnh(i) = Val(tbl.DataBodyRange.Cells(i, enhVolCol).Value)
             If volEnh(i) > 0 Then hasEnhData = True
         End If
-        If enhECCol > 0 Then ecEnh(i) = Val(tbl.DataBodyRange.Cells(i, enhECCol).Value)
     Next i
 
     ' Clear existing charts
     For Each cht In wsChart.ChartObjects: cht.Delete: Next cht
 
-    ' Volume chart
-    Set cht = wsChart.ChartObjects.Add(Schema.CHART_LEFT_POS, Schema.CHART_TOP_START, _
-                                       Schema.CHART_WIDTH, Schema.CHART_HEIGHT_VOLUME)
-    With cht.Chart
-        .ChartType = xlLine
-        ' Standard series
-        With .SeriesCollection.NewSeries
-            .Name = "Std Volume"
-            .XValues = dates
-            .Values = volStd
-            .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
-            .Format.Line.Weight = 2
-        End With
-        ' Enhanced series (if data exists)
-        If hasEnhData Then
-            With .SeriesCollection.NewSeries
-                .Name = "Enh Volume"
-                .XValues = dates
-                .Values = volEnh
-                .Format.Line.ForeColor.RGB = Schema.COLOR_ENH_LINE
-                .Format.Line.DashStyle = msoLineDash
-                .Format.Line.Weight = 2
-            End With
-        End If
-        ' Trigger threshold
-        If cfg.TriggerVol > 0 Then
-            ReDim trigArr(1 To n)
-            For i = 1 To n: trigArr(i) = cfg.TriggerVol: Next i
-            With .SeriesCollection.NewSeries
-                .Name = "Trigger"
-                .XValues = dates
-                .Values = trigArr
-                .Format.Line.ForeColor.RGB = Schema.COLOR_TRIGGER_LINE
-                .Format.Line.DashStyle = msoLineDash
-                .Format.Line.Weight = 1.5
-            End With
-        End If
-        .HasTitle = True: .ChartTitle.Text = site & " - Volume"
-        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
-        .Axes(xlCategory).TickLabels.NumberFormat = "d/mm/yy"
-        .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "ML"
-    End With
+    ' Generate one chart per chemistry metric
+    chartTop = Schema.CHART_TOP_START
+    For chemIdx = 1 To Schema.ChemistryCount()
+        ' Get chemistry column indices
+        stdChemCol = Helpers.ColIdx(tbl, Schema.StdChemColName(chemIdx))
+        enhChemCol = Helpers.ColIdx(tbl, Schema.EnhChemColName(chemIdx))
 
-    ' EC chart
-    Set cht = wsChart.ChartObjects.Add(Schema.CHART_LEFT_POS, _
-        Schema.CHART_TOP_START + Schema.CHART_HEIGHT_VOLUME + Schema.CHART_SPACING, _
-        Schema.CHART_WIDTH, Schema.CHART_HEIGHT_METRIC)
-    With cht.Chart
-        .ChartType = xlLine
-        ' Standard series
-        With .SeriesCollection.NewSeries
-            .Name = "Std EC"
-            .XValues = dates
-            .Values = ecStd
-            .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
-            .Format.Line.Weight = 2
-        End With
-        ' Enhanced series (if data exists)
-        If hasEnhData Then
+        ' Build chemistry arrays
+        ReDim chemStd(1 To n)
+        ReDim chemEnh(1 To n)
+        For i = 1 To n
+            If stdChemCol > 0 Then chemStd(i) = Val(tbl.DataBodyRange.Cells(i, stdChemCol).Value)
+            If enhChemCol > 0 Then chemEnh(i) = Val(tbl.DataBodyRange.Cells(i, enhChemCol).Value)
+        Next i
+
+        ' Get chemistry name and unit for axis labels
+        chemName = Schema.ChemShortName(chemIdx)
+        chemUnit = Schema.ChemistryNames()(chemIdx - 1)  ' Full name with unit
+
+        ' Create dual-axis chart
+        Set cht = wsChart.ChartObjects.Add(Schema.CHART_LEFT_POS, chartTop, _
+                                           Schema.CHART_WIDTH, Schema.CHART_HEIGHT_METRIC)
+        With cht.Chart
+            .ChartType = xlLine
+
+            ' === LEFT Y-AXIS: Chemistry (Solid lines) ===
+            ' Standard chemistry series
             With .SeriesCollection.NewSeries
-                .Name = "Enh EC"
+                .Name = "Std " & chemName
                 .XValues = dates
-                .Values = ecEnh
-                .Format.Line.ForeColor.RGB = Schema.COLOR_ENH_LINE
-                .Format.Line.DashStyle = msoLineDash
+                .Values = chemStd
+                .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
                 .Format.Line.Weight = 2
             End With
-        End If
-        ' Trigger threshold
-        If cfg.TriggerChem(1) > 0 Then
-            ReDim trigArr(1 To n)
-            For i = 1 To n: trigArr(i) = cfg.TriggerChem(1): Next i
+            ' Enhanced chemistry series (if data exists)
+            If hasEnhData Then
+                With .SeriesCollection.NewSeries
+                    .Name = "Enh " & chemName
+                    .XValues = dates
+                    .Values = chemEnh
+                    .Format.Line.ForeColor.RGB = Schema.COLOR_ENH_LINE
+                    .Format.Line.Weight = 2
+                End With
+            End If
+            ' Chemistry trigger threshold (left axis)
+            If cfg.TriggerChem(chemIdx) > 0 Then
+                ReDim trigArr(1 To n)
+                For i = 1 To n: trigArr(i) = cfg.TriggerChem(chemIdx): Next i
+                With .SeriesCollection.NewSeries
+                    .Name = chemName & " Trigger"
+                    .XValues = dates
+                    .Values = trigArr
+                    .Format.Line.ForeColor.RGB = Schema.COLOR_TRIGGER_LINE
+                    .Format.Line.DashStyle = msoLineDashDot
+                    .Format.Line.Weight = 1.5
+                End With
+            End If
+
+            ' === RIGHT Y-AXIS: Volume (Dashed lines) ===
+            ' Standard volume series
             With .SeriesCollection.NewSeries
-                .Name = "Trigger"
+                .Name = "Std Vol"
                 .XValues = dates
-                .Values = trigArr
-                .Format.Line.ForeColor.RGB = Schema.COLOR_TRIGGER_LINE
+                .Values = volStd
+                .Format.Line.ForeColor.RGB = Schema.COLOR_STD_LINE
                 .Format.Line.DashStyle = msoLineDash
-                .Format.Line.Weight = 1.5
+                .Format.Line.Weight = 2
+                .AxisGroup = xlSecondary
             End With
-        End If
-        .HasTitle = True: .ChartTitle.Text = site & " - EC"
-        .Axes(xlCategory).HasTitle = True: .Axes(xlCategory).AxisTitle.Text = "Date"
-        .Axes(xlCategory).TickLabels.NumberFormat = "d/mm/yy"
-        .Axes(xlValue).HasTitle = True: .Axes(xlValue).AxisTitle.Text = "EC (uS/cm)"
-    End With
+            ' Enhanced volume series (if data exists)
+            If hasEnhData Then
+                With .SeriesCollection.NewSeries
+                    .Name = "Enh Vol"
+                    .XValues = dates
+                    .Values = volEnh
+                    .Format.Line.ForeColor.RGB = Schema.COLOR_ENH_LINE
+                    .Format.Line.DashStyle = msoLineDash
+                    .Format.Line.Weight = 2
+                    .AxisGroup = xlSecondary
+                End With
+            End If
+            ' Volume trigger threshold (right axis)
+            If cfg.TriggerVol > 0 Then
+                ReDim trigArr(1 To n)
+                For i = 1 To n: trigArr(i) = cfg.TriggerVol: Next i
+                With .SeriesCollection.NewSeries
+                    .Name = "Vol Trigger"
+                    .XValues = dates
+                    .Values = trigArr
+                    .Format.Line.ForeColor.RGB = Schema.COLOR_TRIGGER_LINE
+                    .Format.Line.DashStyle = msoLineDashDot
+                    .Format.Line.Weight = 1.5
+                    .AxisGroup = xlSecondary
+                End With
+            End If
+
+            ' Chart formatting
+            .HasTitle = True: .ChartTitle.Text = site & " - " & chemName & " + Volume"
+            .Axes(xlCategory).TickLabels.NumberFormat = "d/mm/yy"
+            .Axes(xlValue, xlPrimary).HasTitle = True
+            .Axes(xlValue, xlPrimary).AxisTitle.Text = chemUnit
+            .Axes(xlValue, xlSecondary).HasTitle = True
+            .Axes(xlValue, xlSecondary).AxisTitle.Text = "Volume (ML)"
+            .HasLegend = True
+            .Legend.Position = xlLegendPositionBottom
+        End With
+
+        chartTop = chartTop + Schema.CHART_HEIGHT_METRIC + Schema.CHART_SPACING
+    Next chemIdx
 End Sub
 
 ' ==== Quick Tests ============================================================

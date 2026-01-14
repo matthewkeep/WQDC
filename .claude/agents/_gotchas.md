@@ -24,21 +24,24 @@ Accumulated learnings. All agents should reference this before making changes.
 
 | Issue | Fix |
 |-------|-----|
-| Chemistry column names | `Schema.ChemistryNames()` returns full names like "EC (uS/cm)" |
+| Chemistry column names | `Schema.ChemistryNames()` = full names, `Schema.ChemShortName(idx)` = short (delegates to `Core.MetricName`) |
+| Live table column names | Use `Schema.StdChemColName(idx)`, `Schema.EnhChemColName(idx)`, `Schema.EnhHidColName(idx)` |
 | History/SimLog coordination | Share RunId between both for rollback |
 | Helper functions location | Put in `Helpers.bas`, not `Schema.bas` (Schema = constants only) |
 | Table column lookup | Use `Helpers.ColIdx()` not private copies |
+| Date row lookup | Use `Helpers.FindRowByDate()` - O(1) via Application.Match |
 | Conditional format priority | Apply Enhanced rule LAST (highest priority) |
-| Range access utilities | Use `Helpers.GetRng`, `Helpers.WriteToRange`, `Helpers.ReadFromRange` |
+| Range access utilities | Use `Helpers.GetRng`, `Helpers.WriteToRange`, `Helpers.ReadFromRange`, `Helpers.GetDateVal` |
 
 ## Module Responsibilities
 
 | Module | Contains | Does NOT contain |
 |--------|----------|------------------|
-| Schema.bas | Constants, ChemistryNames() | Helper functions, utilities |
-| Helpers.bas | ColIdx, GetSheet, GetTable, styling | Business logic, constants |
+| Schema.bas | Constants, ChemistryNames(), column name builders | Helper functions, utilities |
+| Helpers.bas | ColIdx, GetSheet, GetTable, GetRng, WriteToRange, ReadFromRange, GetDateVal, FindRowByDate, styling | Business logic, constants |
 | Events.bas | Event dispatch, toggle helpers | IR table operations (use Helpers) |
 | History.bas | Audit trail, LoadSettings | UI updates (triggers Events) |
+| Data.bas | Worksheet I/O, state loading/saving | Duplicate helpers (use Helpers.bas) |
 
 ## Patterns That Work
 
@@ -78,13 +81,19 @@ Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
 - Action: "Current" or "Rollback"
 - Load: Always "Load" (clickable to restore settings)
 
-## Live Table Columns
+## Live Table Columns (27 total)
 
 ```
-Date, StdVol, StdEC, EnhVol, EnhEC, EnhHid1-7, ErrVol, ErrEC, RunId
+Date,
+StdVol, StdEC, StdF_U, StdF_Mn, StdSO4, StdMg, StdCa, StdTAN,
+EnhVol, EnhEC, EnhF_U, EnhF_Mn, EnhSO4, EnhMg, EnhCa, EnhTAN,
+EnhHidEC, EnhHidF_U, EnhHidF_Mn, EnhHidSO4, EnhHidMg, EnhHidCa, EnhHidTAN,
+ErrVol, ErrEC, RunId
 ```
 
-- EnhHid1-7: Hidden layer for TwoBucket continuity
+- Std[chem]: Standard mode predictions (all 7 chemistry metrics)
+- Enh[chem]: Enhanced mode visible layer predictions
+- EnhHid[chem]: Enhanced hidden layer mass (TwoBucket continuity)
 - ErrVol/ErrEC: Prediction vs telemetry discrepancy
 
 ## Inputs Sheet Layout (N-O)

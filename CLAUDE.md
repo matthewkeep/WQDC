@@ -135,9 +135,11 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 ## Per-Site Architecture
 
 - **Live tables per site:** `tblLive_RP1`, `tblHistory_RP1`
-- **Live table structure:** Date-centric with Std/Enh side-by-side
-  - Columns: Date, StdVol, StdEC, EnhVol, EnhEC, EnhHid1-7, ErrVol, ErrEC, RunId
+- **Live table structure:** Date-centric with Std/Enh side-by-side (27 columns)
+  - Date, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
+  - Column names: `StdEC`, `StdF_U`, `EnhEC`, `EnhF_U`, `EnhHidEC`, `EnhHidF_U`, etc.
   - One row per date (UPSERT on run, not append)
+  - All 7 chemistry metrics logged for Standard and Enhanced
   - Hidden layer stored for TwoBucket continuity between runs
   - Discrepancy columns (ErrVol/ErrEC) compare prediction vs telemetry
 - **History table structure:**
@@ -148,7 +150,10 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 - **RunId format:** `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
 - **Rollback:** Deletes future data, loads settings, auto-runs simulation
 - **Load Settings:** Restores config to Inputs (no deletion, no run)
-- **Charts:** Read from tblLive for full season view
+- **Charts:** 7 dual-axis charts (one per chemistry metric)
+  - Left Y-axis: Chemistry metric (Std + Enh solid lines)
+  - Right Y-axis: Volume (Std + Enh dashed lines)
+  - Styling: Std=Blue, Enh=Teal, Trigger=Red dotted
 - Tables created on-demand (first run) or via `Setup.Initialize`
 
 ## Enhanced Mode

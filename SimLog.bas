@@ -4,7 +4,7 @@ Option Explicit
 '
 ' tblLive_{site}: One row per date with Std/Enh predictions side-by-side.
 ' Standard run creates/updates rows, Enhanced updates existing rows.
-' Columns: Date, StdVol, StdEC, EnhVol, EnhEC, EnhHid1-7, ErrVol, ErrEC, RunId
+' Columns: Date, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
 
 ' ==== Write Functions =======================================================
 
@@ -21,8 +21,8 @@ End Sub
 Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
     ' Writes Standard predictions - creates rows if needed
     Dim tbl As ListObject
-    Dim i As Long, n As Long, rowIdx As Long
-    Dim logDate As Date
+    Dim i As Long, j As Long, n As Long, rowIdx As Long
+    Dim logDate As Date, col As Long
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
@@ -35,10 +35,13 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
         rowIdx = EnsureRowForDate(tbl, logDate)
         If rowIdx = 0 Then Exit Sub  ' Failed to create row
 
-        ' Write Standard columns
+        ' Write Standard columns: Volume + all 7 chemistry metrics
         With tbl.DataBodyRange
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)) = r.Snaps(i).Vol
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)) = r.Snaps(i).Chem(1)
+            For j = 1 To Schema.ChemistryCount()
+                col = Helpers.ColIdx(tbl, Schema.StdChemColName(j))
+                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Chem(j)
+            Next j
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
         End With
     Next i
@@ -51,7 +54,7 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
     ' Writes Enhanced predictions + hidden layer - updates existing rows
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, rowIdx As Long
-    Dim logDate As Date, hidCol As Long
+    Dim logDate As Date, col As Long
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
@@ -68,15 +71,17 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
             If rowIdx = 0 Then Exit Sub
         End If
 
-        ' Write Enhanced columns
+        ' Write Enhanced columns: Volume + all 7 chemistry visible + hidden
         With tbl.DataBodyRange
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)) = r.Snaps(i).Vol
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)) = r.Snaps(i).Chem(1)
 
-            ' Write hidden layer (for TwoBucket continuity)
-            For j = 1 To Core.METRIC_COUNT
-                hidCol = Helpers.ColIdx(tbl, Helpers.EnhHidColName(j))
-                If hidCol > 0 Then .Cells(rowIdx, hidCol) = r.Snaps(i).Hidden(j)
+            For j = 1 To Schema.ChemistryCount()
+                ' Visible layer chemistry
+                col = Helpers.ColIdx(tbl, Schema.EnhChemColName(j))
+                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Chem(j)
+                ' Hidden layer mass (for TwoBucket continuity)
+                col = Helpers.ColIdx(tbl, Schema.EnhHidColName(j))
+                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Hidden(j)
             Next j
 
             .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
@@ -166,14 +171,8 @@ End Sub
 
 Private Function FindRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
     ' Returns row index (1-based) for date, or 0 if not found
-    Dim i As Long
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    For i = 1 To tbl.ListRows.Count
-        If CDate(tbl.DataBodyRange.Cells(i, 1).Value) = targetDate Then
-            FindRowByDate = i
-            Exit Function
-        End If
-    Next i
+    ' Delegates to shared O(1) utility
+    FindRowByDate = Helpers.FindRowByDate(tbl, targetDate)
 End Function
 
 Private Function EnsureRowForDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
@@ -213,14 +212,8 @@ End Function
 
 Private Function FindTelemRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
     ' Returns row index (1-based) for date in telemetry table, or 0 if not found
-    Dim i As Long
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    For i = 1 To tbl.ListRows.Count
-        If CDate(tbl.DataBodyRange.Cells(i, 1).Value) = targetDate Then
-            FindTelemRowByDate = i
-            Exit Function
-        End If
-    Next i
+    ' Delegates to shared O(1) utility
+    FindTelemRowByDate = Helpers.FindRowByDate(tbl, targetDate)
 End Function
 
 ' ==== Delete Functions ======================================================

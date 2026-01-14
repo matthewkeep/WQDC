@@ -837,19 +837,36 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     ' Find position for new table (after existing tables)
     startCol = FindNextTableColumn(ws)
 
-    ' Build header: Date, StdVol, StdEC, EnhVol, EnhEC, EnhHid1-7, ErrVol, ErrEC, RunId
-    ReDim h(1 To 15)
-    h(1) = Schema.LIVE_COL_DATE
-    h(2) = Schema.LIVE_COL_STD_VOL
-    h(3) = Schema.LIVE_COL_STD_EC
-    h(4) = Schema.LIVE_COL_ENH_VOL
-    h(5) = Schema.LIVE_COL_ENH_EC
-    For i = 1 To 7
-        h(5 + i) = Helpers.EnhHidColName(i)  ' EnhHid1 through EnhHid7
-    Next i
-    h(13) = Schema.LIVE_COL_ERR_VOL
-    h(14) = Schema.LIVE_COL_ERR_EC
-    h(15) = Schema.LIVE_COL_RUNID
+    ' Build header: Date, Std (Vol + 7 chem), Enh (Vol + 7 chem), EnhHid (7 chem), ErrVol, ErrEC, RunId
+    ' Total: 1 + 8 + 8 + 7 + 3 = 27 columns
+    Dim col As Long, j As Long
+    ReDim h(1 To 27)
+    col = 1
+
+    ' Date column
+    h(col) = Schema.LIVE_COL_DATE: col = col + 1
+
+    ' Standard columns: StdVol, StdEC, StdF_U, StdF_Mn, StdSO4, StdMg, StdCa, StdTAN
+    h(col) = Schema.LIVE_COL_STD_VOL: col = col + 1
+    For j = 1 To Schema.ChemistryCount()
+        h(col) = Schema.StdChemColName(j): col = col + 1
+    Next j
+
+    ' Enhanced visible columns: EnhVol, EnhEC, EnhF_U, EnhF_Mn, EnhSO4, EnhMg, EnhCa, EnhTAN
+    h(col) = Schema.LIVE_COL_ENH_VOL: col = col + 1
+    For j = 1 To Schema.ChemistryCount()
+        h(col) = Schema.EnhChemColName(j): col = col + 1
+    Next j
+
+    ' Enhanced hidden columns: EnhHidEC, EnhHidF_U, EnhHidF_Mn, EnhHidSO4, EnhHidMg, EnhHidCa, EnhHidTAN
+    For j = 1 To Schema.ChemistryCount()
+        h(col) = Schema.EnhHidColName(j): col = col + 1
+    Next j
+
+    ' Error and RunId columns
+    h(col) = Schema.LIVE_COL_ERR_VOL: col = col + 1
+    h(col) = Schema.LIVE_COL_ERR_EC: col = col + 1
+    h(col) = Schema.LIVE_COL_RUNID
 
     ' Add site label above table
     ws.Cells(1, startCol).Value = site & " Live"

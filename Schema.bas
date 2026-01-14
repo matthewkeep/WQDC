@@ -1,6 +1,6 @@
 Option Explicit
 ' Schema: Constants only (sheet/table/column names, colors, defaults).
-' Dependencies: None
+' Dependencies: Core (for MetricName)
 ' Note: Utility functions moved to Helpers.bas
 
 ' ==== Sheet Names ============================================================
@@ -54,7 +54,7 @@ Public Const LIVE_COL_ENH_EC As String = "EnhEC"
 Public Const LIVE_COL_ERR_VOL As String = "ErrVol"
 Public Const LIVE_COL_ERR_EC As String = "ErrEC"
 Public Const LIVE_COL_RUNID As String = "RunId"
-' Note: EnhHid1-7 columns are chemistry-based, built dynamically
+' Note: Std/Enh chemistry columns built via StdChemColName, EnhChemColName, EnhHidColName
 
 ' ==== Column Names ===========================================================
 ' IR table columns
@@ -134,7 +134,7 @@ Private mChemistryNames As Variant
 
 Private Sub EnsureChemistryNames()
     If IsEmpty(mChemistryNames) Then
-        ' 7 chemistry metrics (excludes Volume)
+        ' 7 chemistry metrics (excludes Volume) - full names with units
         mChemistryNames = Array("EC (uS/cm)", "F_U (ug/L)", "F_Mn (ug/L)", "SO4 (mg/L)", "Mg (mg/L)", "Ca (mg/L)", "TAN (mg/L)")
     End If
 End Sub
@@ -147,7 +147,27 @@ End Function
 
 Public Function ChemistryCount() As Long
     ' Returns count of chemistry metrics (7, excludes Volume)
-    EnsureChemistryNames
-    ChemistryCount = UBound(mChemistryNames) - LBound(mChemistryNames) + 1
+    ChemistryCount = Core.METRIC_COUNT
+End Function
+
+Public Function ChemShortName(ByVal idx As Long) As String
+    ' Returns short name for chemistry index (1-based): EC, F_U, F_Mn, SO4, Mg, Ca, TAN
+    ' Delegates to Core.MetricName (single source of truth)
+    ChemShortName = Core.MetricName(idx)
+End Function
+
+Public Function StdChemColName(ByVal idx As Long) As String
+    ' Standard chemistry column name: StdEC, StdF_U, etc.
+    StdChemColName = "Std" & ChemShortName(idx)
+End Function
+
+Public Function EnhChemColName(ByVal idx As Long) As String
+    ' Enhanced visible chemistry column name: EnhEC, EnhF_U, etc.
+    EnhChemColName = "Enh" & ChemShortName(idx)
+End Function
+
+Public Function EnhHidColName(ByVal idx As Long) As String
+    ' Enhanced hidden mass column name: EnhHidEC, EnhHidF_U, etc.
+    EnhHidColName = "EnhHid" & ChemShortName(idx)
 End Function
 
