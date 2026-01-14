@@ -1,6 +1,6 @@
 Option Explicit
 ' WQOC: Entry point for Water Quality Optimisation Calculator.
-' Dependencies: Core, Data, Sim, History, SimLog, Schema, Setup
+' Dependencies: Core, Data, Sim, History, SimLog, Schema, Setup, Validate
 
 Public Sub Run()
     ' Main entry point - runs Standard, optionally Enhanced, generates charts
@@ -9,6 +9,13 @@ Public Sub Run()
     Dim runIdStd As String, runIdEnh As String
     Dim site As String, cm As XlCalculation, latestDate As Date
     Dim enhancedMode As Boolean, i As Long
+
+    ' Pre-flight validation
+    If Not Validate.Check() Then
+        MsgBox "Structure validation failed. Run Validate.Report for details.", vbExclamation, "WQOC"
+        Exit Sub
+    End If
+
     On Error GoTo Cleanup
 
     cm = Application.Calculation

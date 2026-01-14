@@ -112,27 +112,19 @@ End Function
 
 Private Function LookupValue(ByVal d As Date, ByVal col As Long) As Variant
     ' Looks up value in telemetry table by date and column index
-    ' Returns cell value or Empty if not found
-    Dim tbl As ListObject, i As Long, rowDate As Date
+    ' Uses MATCH for O(1) lookup instead of loop scan
+    Dim tbl As ListObject, rowIdx As Variant
 
     Set tbl = GetTelemTable()
-    If tbl Is Nothing Then
-        LookupValue = Empty
-        Exit Function
-    End If
-    If tbl.DataBodyRange Is Nothing Then
-        LookupValue = Empty
-        Exit Function
-    End If
+    If tbl Is Nothing Then LookupValue = Empty: Exit Function
+    If tbl.DataBodyRange Is Nothing Then LookupValue = Empty: Exit Function
 
-    For i = 1 To tbl.ListRows.Count
-        rowDate = tbl.DataBodyRange.Cells(i, 1).Value
-        If rowDate = d Then
-            LookupValue = tbl.DataBodyRange.Cells(i, col).Value
-            Exit Function
-        End If
-    Next i
-    LookupValue = Empty
+    rowIdx = Application.Match(CDbl(d), tbl.ListColumns(1).DataBodyRange, 0)
+    If IsError(rowIdx) Then
+        LookupValue = Empty
+    Else
+        LookupValue = tbl.DataBodyRange.Cells(rowIdx, col).Value
+    End If
 End Function
 
 Private Function GetTelemTable() As ListObject
