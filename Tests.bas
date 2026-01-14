@@ -44,15 +44,15 @@ Private Function TstMetricCount() As Boolean
 End Function
 
 Private Function TstMetricNames() As Boolean
-    TstMetricNames = (Core.MetricName(1) = "EC") And (Core.MetricName(7) = "TAN")
+    TstMetricNames = (Core.MetricName(mEC) = "EC") And (Core.MetricName(mTAN) = "TAN")
 End Function
 
 Private Function TstCopyState() As Boolean
     Dim s As State, c As State
-    s.Vol = 100: s.Chem(1) = 200: s.Hidden(1) = 5000
+    s.Vol = 100: s.Chem(mEC) = 200: s.Hidden(mEC) = 5000
     c = Core.CopyState(s)
     s.Vol = 50
-    TstCopyState = (c.Vol = 100) And (c.Chem(1) = 200)
+    TstCopyState = (c.Vol = 100) And (c.Chem(mEC) = 200)
 End Function
 
 ' ==== Mode Tests =============================================================
@@ -67,20 +67,20 @@ End Function
 
 Private Function TstSimpleMass() As Boolean
     Dim s As State, cfg As Config, n As State
-    s.Vol = 100: s.Chem(1) = 100
-    cfg.Mode = "Simple": cfg.Inflow = 2: cfg.Outflow = 1: cfg.InflowChem(1) = 500
+    s.Vol = 100: s.Chem(mEC) = 100
+    cfg.Mode = "Simple": cfg.Inflow = 2: cfg.Outflow = 1: cfg.InflowChem(mEC) = 500
     n = Modes.StepSimple(s, cfg, 0)  ' rainVol = 0
-    TstSimpleMass = (Abs(n.Chem(1) - 107.9) < 0.5)
+    TstSimpleMass = (Abs(n.Chem(mEC) - 107.9) < 0.5)
 End Function
 
 Private Function TstTwoBucket() As Boolean
     Dim s As State, cfg As Config, n As State
     Dim massBefore As Double, massAfter As Double
-    s.Vol = 100: s.Chem(1) = 100: s.Hidden(1) = 10000
+    s.Vol = 100: s.Chem(mEC) = 100: s.Hidden(mEC) = 10000
     cfg.Mode = "TwoBucket": cfg.Tau = 7: cfg.SurfaceFrac = 0.8
-    massBefore = s.Vol * s.Chem(1) + s.Hidden(1)
+    massBefore = s.Vol * s.Chem(mEC) + s.Hidden(mEC)
     n = Modes.StepTwoBucket(s, cfg, 0)  ' rainVol = 0
-    massAfter = n.Vol * n.Chem(1) + n.Hidden(1)
+    massAfter = n.Vol * n.Chem(mEC) + n.Hidden(mEC)
     TstTwoBucket = (Abs(massBefore - massAfter) < 0.01)
 End Function
 
@@ -96,9 +96,9 @@ End Function
 
 Private Function TstChemTrigger() As Boolean
     Dim s As State, cfg As Config, r As Result
-    s.Vol = 100: s.Chem(1) = 90
+    s.Vol = 100: s.Chem(mEC) = 90
     cfg.Mode = "Simple": cfg.Days = 10: cfg.Inflow = 1: cfg.Outflow = 1
-    cfg.InflowChem(1) = 200: cfg.TriggerChem(1) = 100
+    cfg.InflowChem(mEC) = 200: cfg.TriggerChem(mEC) = 100
     r = Sim.Run(s, cfg)
     TstChemTrigger = (r.TriggerDay > 0) And (r.TriggerMetric = "EC")
 End Function

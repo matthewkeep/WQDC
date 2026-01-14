@@ -97,14 +97,14 @@ Public Sub RunSeason()
         results(i, 4) = samples(i + 1, 3)                         ' ActualVol (next sample)
 
         ' Standard predictions
-        results(i, 5) = rStd.Snaps(predictDay).Chem(1)            ' StdPredEC
+        results(i, 5) = rStd.Snaps(predictDay).Chem(mEC)           ' StdPredEC
         results(i, 6) = results(i, 5) - results(i, 3)             ' StdErrEC
         results(i, 7) = rStd.Snaps(predictDay).Vol                ' StdPredVol
         results(i, 8) = results(i, 7) - results(i, 4)             ' StdErrVol
 
         ' Enhanced predictions (if enabled)
         If enhancedMode Then
-            results(i, 9) = rEnh.Snaps(predictDay).Chem(1)        ' EnhPredEC
+            results(i, 9) = rEnh.Snaps(predictDay).Chem(mEC)       ' EnhPredEC
             results(i, 10) = results(i, 9) - results(i, 3)        ' EnhErrEC
             results(i, 11) = rEnh.Snaps(predictDay).Vol           ' EnhPredVol
             results(i, 12) = results(i, 11) - results(i, 4)       ' EnhErrVol
@@ -163,7 +163,7 @@ Private Function SnapVisibleLayer(ByRef s As State, ByVal site As String, ByVal 
     latestEC = Telemetry.GetLatestEC(sampleDate, site)
 
     If Not IsEmpty(latestVol) Then snapped.Vol = CDbl(latestVol)
-    If Not IsEmpty(latestEC) Then snapped.Chem(1) = CDbl(latestEC)
+    If Not IsEmpty(latestEC) Then snapped.Chem(mEC) = CDbl(latestEC)
 
     SnapVisibleLayer = snapped
 End Function

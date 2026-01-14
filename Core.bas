@@ -6,6 +6,17 @@ Public Const METRIC_COUNT As Long = 7
 Public Const NO_TRIGGER As Long = -1
 Public Const EPS As Double = 0.000001
 
+' Chemistry metric indices (1-based to match array bounds)
+Public Enum Metric
+    mEC = 1
+    mF_U = 2
+    mF_Mn = 3
+    mSO4 = 4
+    mMg = 5
+    mCa = 6
+    mTAN = 7
+End Enum
+
 Public Type State
     Vol As Double
     Chem(1 To 7) As Double

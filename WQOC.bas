@@ -333,7 +333,7 @@ End Sub
 
 Public Sub TestCore()
     Dim s As State, cfg As Config, r As Result
-    s.Vol = 100: s.Chem(1) = 200
+    s.Vol = 100: s.Chem(mEC) = 200
     cfg.Mode = "Simple": cfg.Days = 50: cfg.Inflow = 2: cfg.Outflow = 1: cfg.TriggerVol = 150
     r = Sim.Run(s, cfg)
 
@@ -347,12 +347,12 @@ End Sub
 
 Public Sub TestTwoBucket()
     Dim s As State, cfg As Config, r As Result
-    s.Vol = 100: s.Chem(1) = 200: s.Hidden(1) = 5000
+    s.Vol = 100: s.Chem(mEC) = 200: s.Hidden(mEC) = 5000
     cfg.Mode = "TwoBucket": cfg.Days = 30: cfg.Tau = 7
-    cfg.Inflow = 2: cfg.Outflow = 1: cfg.TriggerChem(1) = 300
+    cfg.Inflow = 2: cfg.Outflow = 1: cfg.TriggerChem(mEC) = 300
     r = Sim.Run(s, cfg)
 
-    Debug.Print "Two-bucket: Start EC=" & s.Chem(1) & " End EC=" & r.FinalState.Chem(1)
+    Debug.Print "Two-bucket: Start EC=" & s.Chem(mEC) & " End EC=" & r.FinalState.Chem(mEC)
     If r.TriggerDay <> Core.NO_TRIGGER Then
         Debug.Print "  TRIGGER day " & r.TriggerDay & ": " & r.TriggerMetric
     Else

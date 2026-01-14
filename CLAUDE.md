@@ -75,6 +75,10 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 Type State    ' Vol, Chem(1-7), Hidden(1-7) - UDT, defaults to zeros
 Type Config   ' Site, Mode, Days, Tau, Inflow, Outflow, Triggers, RainfallMode, RainFactor, SurfaceFrac
 Type Result   ' TriggerDay, TriggerMetric, TriggerDate, Snaps(), FinalState
+
+Enum Metric   ' Use instead of magic numbers: s.Chem(mEC), cfg.TriggerChem(mSO4)
+    mEC = 1, mF_U = 2, mF_Mn = 3, mSO4 = 4, mMg = 5, mCa = 6, mTAN = 7
+End Enum
 ```
 
 ### Key Flows

@@ -67,7 +67,7 @@ Public Function SnapState(ByRef s As State, ByVal site As String) As State
 
     ' Snap visible layer only
     If Not IsEmpty(latestVol) Then snapped.Vol = CDbl(latestVol)
-    If Not IsEmpty(latestEC) Then snapped.Chem(1) = CDbl(latestEC)
+    If Not IsEmpty(latestEC) Then snapped.Chem(mEC) = CDbl(latestEC)
 
     SnapState = snapped
 End Function
