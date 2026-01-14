@@ -55,7 +55,7 @@ WQOC.bas ─┬─ Data.bas ──────── Schema.bas
 
 ```vba
 Type State    ' Vol, Chem(1-7), Hidden(1-7), HidVol
-Type Config   ' Mode, Days, Tau, Inflow, Outflow, Triggers
+Type Config   ' Mode, Days, Tau, Inflow, Outflow, Triggers, RainfallMode, RainFactor, SurfaceFrac
 Type Result   ' TriggerDay, TriggerMetric, Snaps(), FinalState
 ```
 
@@ -107,4 +107,11 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 - **RunId format:** `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
 - **Rollback:** Date-based (`DeleteAfterDate`), not run-based
 - **Charts:** Read from tblLive for full season view
+- **History config:** Stores all Enhanced settings (RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor)
 - Tables created on-demand (first run) or via `Setup.Initialize`
+
+## Enhanced Mode
+
+- **Rainfall:** Telemetry in mm/day × RainFactor = volume added (ML)
+- **Hidden mass:** Auto-loads from tblLive when Sample Date changes
+- **Conditional UI:** Rain Factor greyed when Rainfall=Off, Tau/SurfaceFrac greyed when Model=Simple
