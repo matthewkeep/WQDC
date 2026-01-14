@@ -9,6 +9,7 @@ Option Explicit
 
 Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
     ' Appends new snapshots to site's log table
+    ' Day 0 (sample date) is shaded for identification
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, newRow As ListRow
 
@@ -26,6 +27,11 @@ Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As Strin
             For j = 1 To Core.METRIC_COUNT
                 .Cells(1, 4 + j) = r.Snaps(i).Chem(j)  ' Chemistry
             Next j
+
+            ' Shade Day 0 (sample/start date) for identification
+            If i = 0 Then
+                .Interior.Color = Schema.COLOR_SAMPLE_DATE
+            End If
         End With
     Next i
 End Sub
@@ -57,71 +63,6 @@ Public Sub ClearSiteLog(ByVal site As String)
 End Sub
 
 ' ==== Read Functions ========================================================
-
-Public Function GetRunSnapshots(ByVal runId As String, ByVal site As String) As State()
-    ' Returns array of State snapshots for a specific RunId
-    Dim tbl As ListObject
-    Dim snaps() As State
-    Dim i As Long, j As Long, cnt As Long
-
-    Set tbl = GetLogTable(site)
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-
-    ' Count matching rows
-    cnt = 0
-    For i = 1 To tbl.ListRows.Count
-        If tbl.DataBodyRange.Cells(i, 1).Value = runId Then cnt = cnt + 1
-    Next i
-    If cnt = 0 Then Exit Function
-
-    ' Extract snapshots
-    ReDim snaps(0 To cnt - 1)
-    cnt = 0
-    For i = 1 To tbl.ListRows.Count
-        If tbl.DataBodyRange.Cells(i, 1).Value = runId Then
-            snaps(cnt).Vol = tbl.DataBodyRange.Cells(i, 4)
-            For j = 1 To Core.METRIC_COUNT
-                snaps(cnt).Chem(j) = tbl.DataBodyRange.Cells(i, 4 + j)
-            Next j
-            cnt = cnt + 1
-        End If
-    Next i
-
-    GetRunSnapshots = snaps
-End Function
-
-Public Function GetAllRunIds(ByVal site As String) As Variant
-    ' Returns array of unique RunIds in site's log
-    Dim tbl As ListObject
-    Dim dict As Object, i As Long, runId As String
-
-    Set tbl = GetLogTable(site)
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-
-    ' Use dictionary for unique values (DictionaryShim for Mac compatibility)
-    Set dict = New DictionaryShim
-    For i = 1 To tbl.ListRows.Count
-        runId = tbl.DataBodyRange.Cells(i, 1).Value
-        If Len(runId) > 0 And Not dict.Exists(runId) Then
-            dict.Add runId, True
-        End If
-    Next i
-
-    If dict.Count = 0 Then Exit Function
-
-    GetAllRunIds = dict.Keys
-End Function
-
-Public Function GetRunCount(ByVal site As String) As Long
-    ' Returns count of unique runs in site's log
-    Dim ids As Variant
-    ids = GetAllRunIds(site)
-    If IsArray(ids) Then
-        GetRunCount = UBound(ids) - LBound(ids) + 1
-    End If
-End Function
 
 Public Function GetLatestLogDate(ByVal site As String) As Date
     ' Returns the most recent date in site's log (0 if empty)

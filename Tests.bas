@@ -119,7 +119,3 @@ Private Function TstNoTrigger() As Boolean
     TstNoTrigger = (r.TriggerDay = Core.NO_TRIGGER)
 End Function
 
-' ==== Manual Tests ===========================================================
-
-Public Sub TestWQOC(): WQOC.TestCore: End Sub
-Public Sub TestTwoBucket(): WQOC.TestTwoBucket: End Sub

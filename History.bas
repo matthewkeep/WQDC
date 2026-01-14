@@ -12,13 +12,14 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Sub
 
-    actionCol = 8  ' Action is column 8 (no Site column)
+    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    If actionCol = 0 Then Exit Sub
 
     ' Update existing rows' action to "Rollback"
     If Not tbl.DataBodyRange Is Nothing Then
         For i = 1 To tbl.ListRows.Count
             tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
-            StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
+            Schema.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
         Next i
     End If
 
@@ -33,7 +34,7 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
         .Cells(1, 6).Value = r.TriggerDay
         .Cells(1, 7).Value = r.TriggerMetric
         .Cells(1, actionCol).Value = Schema.ACTION_CURRENT
-        StyleActionCell .Cells(1, actionCol)
+        Schema.StyleActionCell .Cells(1, actionCol)
     End With
 End Sub
 
@@ -72,8 +73,12 @@ Public Function RollbackLast(ByVal site As String) As Boolean
 
     ' Update new last row to Current
     If tbl.ListRows.Count > 0 Then
-        tbl.DataBodyRange.Cells(tbl.ListRows.Count, 8).Value = Schema.ACTION_CURRENT
-        StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, 8)
+        Dim actionCol As Long
+        actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+        If actionCol > 0 Then
+            tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol).Value = Schema.ACTION_CURRENT
+            Schema.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
+        End If
     End If
 
     RollbackLast = True
@@ -110,8 +115,12 @@ Public Function RollbackTo(ByVal targetRunId As String, ByVal site As String) As
 
     ' Update target row to Current
     If tbl.ListRows.Count > 0 Then
-        tbl.DataBodyRange.Cells(tbl.ListRows.Count, 8).Value = Schema.ACTION_CURRENT
-        StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, 8)
+        Dim actionCol As Long
+        actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+        If actionCol > 0 Then
+            tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol).Value = Schema.ACTION_CURRENT
+            Schema.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
+        End If
     End If
 
     RollbackTo = removed
@@ -167,11 +176,3 @@ Private Function GetHistoryTable(ByVal site As String) As ListObject
     End If
 End Function
 
-' ==== Helpers ================================================================
-
-Private Sub StyleActionCell(ByVal cell As Range)
-    With cell
-        .Font.Color = Schema.COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-    End With
-End Sub

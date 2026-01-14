@@ -61,7 +61,7 @@ Public Sub Run()
 
         ' Initialize hidden layer at equilibrium on first Enhanced run
         If IsHiddenUninitialized(s) Then
-            s = InitHiddenAtEquilibrium(s)
+            s = Core.InitHiddenAtEquilibrium(s)
         End If
 
         rEnh = Sim.Run(s, cfgEnh)
@@ -336,15 +336,4 @@ End Sub
 Private Function IsHiddenUninitialized(ByRef s As State) As Boolean
     ' Returns True if hidden layer has not been initialized (first Enhanced run)
     IsHiddenUninitialized = (s.Hidden(1) < Core.EPS)
-End Function
-
-Private Function InitHiddenAtEquilibrium(ByRef s As State) As State
-    ' Initializes hidden layer at equilibrium with visible layer
-    ' Hidden mass = visible volume * visible concentration
-    Dim init As State, i As Long
-    init = Core.CopyState(s)
-    For i = 1 To Core.METRIC_COUNT
-        init.Hidden(i) = s.Vol * s.Chem(i)
-    Next i
-    InitHiddenAtEquilibrium = init
 End Function

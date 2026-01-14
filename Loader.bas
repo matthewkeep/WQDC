@@ -4,13 +4,6 @@ Option Explicit
 
 ' ==== Public Entry Points ===================================================
 
-Public Sub RefreshSiteData()
-    ' Called by "Load Site" button - loads data for currently selected site
-    Dim site As String
-    site = GetCurrentSite()
-    If Len(site) > 0 Then LoadSiteData site
-End Sub
-
 Public Sub LoadSiteData(ByVal site As String)
     ' Main orchestrator: clears IR, loads from catalog, loads RR latest
     If Len(Trim$(site)) = 0 Then Exit Sub
@@ -29,7 +22,7 @@ End Sub
 
 Private Sub ClearIRTable()
     Dim tbl As ListObject
-    Set tbl = GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
+    Set tbl = Schema.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If tbl Is Nothing Then Exit Sub
     If Not tbl.DataBodyRange Is Nothing Then
         tbl.DataBodyRange.Delete
@@ -44,14 +37,14 @@ Private Sub PopulateIRFromCatalog(ByVal site As String)
     Dim chemNames As Variant, labData As Variant
     Dim i As Long
 
-    Set tblCat = GetTable(Schema.SHEET_CONFIG, Schema.TABLE_CATALOG)
-    Set tblIR = GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
+    Set tblCat = Schema.GetTable(Schema.SHEET_CONFIG, Schema.TABLE_CATALOG)
+    Set tblIR = Schema.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If tblCat Is Nothing Or tblIR Is Nothing Then Exit Sub
 
     chemNames = Schema.ChemistryNames()
 
     For Each catRow In tblCat.ListRows
-        If MatchesSite(catRow.Range.Cells(1, 1).Value, site) Then
+        If Schema.MatchesSite(catRow.Range.Cells(1, 1).Value, site) Then
             irSite = Trim$(catRow.Range.Cells(1, 2).Value)
             flow = Val(catRow.Range.Cells(1, 3).Value)
 
@@ -83,7 +76,7 @@ Private Sub PopulateRRLatest(ByVal site As String)
     Dim chemNames As Variant, rng As Range
     Dim i As Long
 
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
     labData = GetLatestLabData(site)
@@ -121,7 +114,7 @@ Private Function GetLatestLabData(ByVal site As String) As Variant
     Dim chemNames As Variant, result() As Variant
     Dim sampleDate As Date, i As Long
 
-    Set tbl = GetTable(Schema.SHEET_RESULTS, Schema.TABLE_RESULTS)
+    Set tbl = Schema.GetTable(Schema.SHEET_RESULTS, Schema.TABLE_RESULTS)
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
 
@@ -130,7 +123,7 @@ Private Function GetLatestLabData(ByVal site As String) As Variant
     ' Find most recent sample for this site
     latestDate = 0
     For Each row In tbl.ListRows
-        If MatchesSite(row.Range.Cells(1, 1).Value, site) Then
+        If Schema.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
             On Error Resume Next
             sampleDate = CDate(row.Range.Cells(1, 2).Value)
             On Error GoTo 0
@@ -153,34 +146,3 @@ Private Function GetLatestLabData(ByVal site As String) As Variant
     GetLatestLabData = result
 End Function
 
-' ==== Helpers ===============================================================
-
-Private Function GetCurrentSite() As String
-    Dim ws As Worksheet
-    Set ws = GetSheet(Schema.SHEET_INPUT)
-    If Not ws Is Nothing Then
-        On Error Resume Next
-        GetCurrentSite = ws.Range(Schema.NAME_SITE).Value
-        On Error GoTo 0
-    End If
-End Function
-
-Private Function GetSheet(ByVal nm As String) As Worksheet
-    On Error Resume Next
-    Set GetSheet = ThisWorkbook.Worksheets(nm)
-    On Error GoTo 0
-End Function
-
-Private Function GetTable(ByVal sheetName As String, ByVal tableName As String) As ListObject
-    Dim ws As Worksheet
-    Set ws = GetSheet(sheetName)
-    If Not ws Is Nothing Then
-        On Error Resume Next
-        Set GetTable = ws.ListObjects(tableName)
-        On Error GoTo 0
-    End If
-End Function
-
-Private Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
-    MatchesSite = (UCase$(Trim$(CStr(v))) = UCase$(Trim$(site)))
-End Function

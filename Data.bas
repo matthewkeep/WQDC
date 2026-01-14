@@ -7,7 +7,7 @@ Option Explicit
 Public Function GetSite() As String
     ' Returns currently selected site from Inputs sheet
     Dim ws As Worksheet
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetSite = Trim$(CStr(ws.Range(Schema.NAME_SITE).Value))
@@ -18,7 +18,7 @@ End Function
 Public Function GetEnhancedMode() As String
     ' Returns Enhanced Mode setting (On/Off)
     Dim ws As Worksheet
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetEnhancedMode = Trim$(CStr(ws.Range(Schema.NAME_ENHANCED_MODE).Value))
@@ -31,7 +31,7 @@ End Function
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long
     On Error Resume Next
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
     s.Vol = Val(GetVal(ws, Schema.NAME_INIT_VOL))
@@ -75,7 +75,7 @@ End Function
 Public Function GetTelemCalEnabled() As Boolean
     ' Returns True if telemetry calibration is enabled
     Dim ws As Worksheet
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetTelemCalEnabled = (UCase$(Trim$(ws.Range(Schema.NAME_TELEM_CAL).Value)) = "ON")
@@ -90,13 +90,13 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     Dim cfg As Config, ws As Worksheet, rng As Range, i As Long
     Dim mixingModel As String, rainfallMode As String, telemCal As String
     On Error Resume Next
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
     ' Common config
     cfg.Site = site
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
-    cfg.StartDate = Val(GetVal(ws, Schema.NAME_SAMPLE_DATE))
+    cfg.StartDate = GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
     cfg.Tau = Val(GetVal(ws, Schema.NAME_TAU))
     cfg.Outflow = Val(GetVal(ws, Schema.NAME_NET_OUT))
     cfg.SurfaceFrac = Val(GetVal(ws, Schema.NAME_SURFACE_FRACTION))
@@ -183,7 +183,7 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     Dim ws As Worksheet, txt As String, rng As Range, i As Long
     Dim predState As State, targetName As String
     On Error Resume Next
-    Set ws = GetSheet(Schema.SHEET_INPUT)
+    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
     ' Use state at trigger day for predictions (or final if no trigger)
@@ -210,10 +210,13 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
 
     ' Standard: update predicted row only (no hidden layer in Simple mode)
     If UCase$(runType) = "STANDARD" Then
-        ws.Cells(5, 2).Value = predState.Vol
-        For i = 1 To Core.METRIC_COUNT
-            ws.Cells(5, 2 + i).Value = predState.Chem(i)
-        Next i
+        SetVal ws, Schema.NAME_RESULT_VOL, predState.Vol
+        Set rng = GetRng(ws, Schema.NAME_PRED_ROW)
+        If Not rng Is Nothing Then
+            For i = 1 To Core.METRIC_COUNT
+                If i <= rng.Columns.Count Then rng.Cells(1, i).Value = predState.Chem(i)
+            Next i
+        End If
     End If
 
     ' Enhanced: save hidden mass for TwoBucket continuity between runs
@@ -230,12 +233,6 @@ End Sub
 
 ' ==== Helpers ================================================================
 
-Private Function GetSheet(ByVal nm As String) As Worksheet
-    On Error Resume Next
-    Set GetSheet = ThisWorkbook.Worksheets(nm)
-    On Error GoTo 0
-End Function
-
 Private Function GetRng(ByVal ws As Worksheet, ByVal nm As String) As Range
     On Error Resume Next
     Set GetRng = ws.Range(nm)
@@ -246,6 +243,20 @@ Private Function GetVal(ByVal ws As Worksheet, ByVal nm As String) As String
     Dim rng As Range
     Set rng = GetRng(ws, nm)
     If Not rng Is Nothing Then GetVal = CStr(rng.Value)
+End Function
+
+Private Function GetDateVal(ByVal ws As Worksheet, ByVal nm As String) As Date
+    ' Returns date value from named range, or 0 if invalid/empty
+    Dim rng As Range, v As Variant
+    Set rng = GetRng(ws, nm)
+    If rng Is Nothing Then Exit Function
+    v = rng.Value
+    If IsEmpty(v) Then Exit Function
+    If IsDate(v) Then
+        GetDateVal = CDate(v)
+    ElseIf IsNumeric(v) And v > 0 Then
+        GetDateVal = CDate(v)  ' Excel serial date number
+    End If
 End Function
 
 Private Sub SetVal(ByVal ws As Worksheet, ByVal nm As String, ByVal v As Variant)

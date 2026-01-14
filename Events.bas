@@ -54,9 +54,9 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     End If
 
     ' Check IR table action column
-    Set tbl = GetTable(ws, Schema.TABLE_IR)
+    Set tbl = Schema.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If Not tbl Is Nothing Then
-        actionCol = GetColIndex(tbl, Schema.IR_COL_ACTION)
+        actionCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTION)
         If actionCol > 0 Then
             ' Check header (Add)
             If Not Intersect(Target, tbl.HeaderRowRange.Cells(1, actionCol)) Is Nothing Then
@@ -102,7 +102,7 @@ Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Extract site from table name (e.g., "tblHistory_RP1" -> "RP1")
     site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
 
-    actionCol = GetColIndex(tbl, Schema.HISTORY_COL_ACTION)
+    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     If actionCol = 0 Then Exit Sub
 
     ' Check if clicked in action column data area
@@ -131,10 +131,10 @@ Private Sub AddIRRow(ByVal tbl As ListObject)
     ' Add a new empty row to IR table with "Remove" action
     Dim newRow As ListRow, actionCol As Long
     Set newRow = tbl.ListRows.Add
-    actionCol = GetColIndex(tbl, Schema.IR_COL_ACTION)
+    actionCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTION)
     If actionCol > 0 Then
         newRow.Range.Cells(1, actionCol).Value = Schema.ACTION_REMOVE
-        StyleActionCell newRow.Range.Cells(1, actionCol)
+        Schema.StyleActionCell newRow.Range.Cells(1, actionCol)
     End If
 End Sub
 
@@ -143,7 +143,7 @@ Private Sub RemoveIRRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
     If tbl.ListRows.Count = 1 Then
         ' Don't delete last row, just clear it
         tbl.DataBodyRange.ClearContents
-        tbl.DataBodyRange.Cells(1, GetColIndex(tbl, Schema.IR_COL_ACTION)).Value = Schema.ACTION_REMOVE
+        tbl.DataBodyRange.Cells(1, Schema.ColIdx(tbl, Schema.IR_COL_ACTION)).Value = Schema.ACTION_REMOVE
     Else
         tbl.ListRows(rowIdx).Delete
     End If
@@ -153,7 +153,7 @@ Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
     ' Update action column text: "Current" for last row, "Rollback" for others
     Dim i As Long, actionCol As Long
     If tbl.DataBodyRange Is Nothing Then Exit Sub
-    actionCol = GetColIndex(tbl, Schema.HISTORY_COL_ACTION)
+    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     If actionCol = 0 Then Exit Sub
 
     For i = 1 To tbl.ListRows.Count
@@ -162,29 +162,7 @@ Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
         Else
             tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
         End If
-        StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
+        Schema.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
     Next i
 End Sub
 
-' ==== Helpers ==================================================================
-
-Private Function GetTable(ByVal ws As Worksheet, ByVal nm As String) As ListObject
-    On Error Resume Next
-    Set GetTable = ws.ListObjects(nm)
-    On Error GoTo 0
-End Function
-
-Private Function GetColIndex(ByVal tbl As ListObject, ByVal colName As String) As Long
-    Dim col As ListColumn
-    On Error Resume Next
-    Set col = tbl.ListColumns(colName)
-    If Not col Is Nothing Then GetColIndex = col.Index
-    On Error GoTo 0
-End Function
-
-Private Sub StyleActionCell(ByVal cell As Range)
-    With cell
-        .Font.Color = Schema.COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-    End With
-End Sub

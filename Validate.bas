@@ -55,10 +55,9 @@ Private Sub ChkRanges()
     ChkRange Schema.NAME_OUTPUT
     ChkRange Schema.NAME_RES_ROW
     ChkRange Schema.NAME_LIMIT_ROW
+    ChkRange Schema.NAME_PRED_ROW
     ChkRange Schema.NAME_HIDDEN_MASS
     ChkRange Schema.NAME_TAU
-    ChkRange Schema.NAME_RAIN_FACTOR
-    ChkRange Schema.NAME_RAIN_MODE
     ChkRange Schema.NAME_SURFACE_FRACTION
     ChkRange Schema.NAME_NET_OUT
     ChkRange Schema.NAME_ENHANCED_MODE

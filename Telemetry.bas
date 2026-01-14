@@ -17,16 +17,6 @@ Public Function GetRainForDate(ByVal d As Date) As Double
     End If
 End Function
 
-Public Function GetECForDate(ByVal d As Date, ByVal site As String) As Variant
-    ' Returns EC (uS/cm) for date and site, or Empty if not found
-    GetECForDate = LookupValueByColName(d, Schema.TelemECColName(site))
-End Function
-
-Public Function GetVolForDate(ByVal d As Date, ByVal site As String) As Variant
-    ' Returns Volume (ML) for date and site, or Empty if not found
-    GetVolForDate = LookupValueByColName(d, Schema.TelemVolColName(site))
-End Function
-
 ' ==== Range Lookups ==========================================================
 
 Public Function GetHindcastRain(ByVal startDate As Date, ByVal endDate As Date) As Double()
@@ -49,26 +39,6 @@ Public Function GetHindcastRain(ByVal startDate As Date, ByVal endDate As Date) 
     GetHindcastRain = result
 End Function
 
-Public Function GetHindcastEC(ByVal startDate As Date, ByVal endDate As Date, ByVal site As String) As Variant()
-    ' Returns array of daily EC for date range (inclusive) for site
-    ' Missing values are Empty
-    Dim days As Long, i As Long
-    Dim result() As Variant
-
-    days = endDate - startDate + 1
-    If days < 1 Then
-        ReDim result(0 To 0): result(0) = Empty
-        GetHindcastEC = result
-        Exit Function
-    End If
-
-    ReDim result(0 To days - 1)
-    For i = 0 To days - 1
-        result(i) = GetECForDate(startDate + i, site)
-    Next i
-    GetHindcastEC = result
-End Function
-
 Public Function GetLatestEC(ByVal beforeDate As Date, ByVal site As String) As Variant
     ' Returns most recent EC value on or before the given date for site
     ' Returns Empty if no data found
@@ -80,7 +50,7 @@ Public Function GetLatestEC(ByVal beforeDate As Date, ByVal site As String) As V
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
-    ecCol = GetColIndex(tbl, Schema.TelemECColName(site))
+    ecCol = Schema.ColIdx(tbl, Schema.TelemECColName(site))
     If ecCol = 0 Then Exit Function
 
     bestDate = 0: bestEC = Empty
@@ -108,7 +78,7 @@ Public Function GetLatestVol(ByVal beforeDate As Date, ByVal site As String) As 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
-    volCol = GetColIndex(tbl, Schema.TelemVolColName(site))
+    volCol = Schema.ColIdx(tbl, Schema.TelemVolColName(site))
     If volCol = 0 Then Exit Function
 
     bestDate = 0: bestVol = Empty
@@ -163,35 +133,6 @@ Private Function LookupValue(ByVal d As Date, ByVal col As Long) As Variant
         End If
     Next i
     LookupValue = Empty
-End Function
-
-Private Function LookupValueByColName(ByVal d As Date, ByVal colName As String) As Variant
-    ' Looks up value in telemetry table by date and column name
-    ' Returns cell value or Empty if not found
-    Dim tbl As ListObject, colIdx As Long
-
-    Set tbl = GetTelemTable()
-    If tbl Is Nothing Then
-        LookupValueByColName = Empty
-        Exit Function
-    End If
-
-    colIdx = GetColIndex(tbl, colName)
-    If colIdx = 0 Then
-        LookupValueByColName = Empty
-        Exit Function
-    End If
-
-    LookupValueByColName = LookupValue(d, colIdx)
-End Function
-
-Private Function GetColIndex(ByVal tbl As ListObject, ByVal colName As String) As Long
-    ' Returns column index (1-based) or 0 if not found
-    Dim col As ListColumn
-    On Error Resume Next
-    Set col = tbl.ListColumns(colName)
-    If Not col Is Nothing Then GetColIndex = col.Index
-    On Error GoTo 0
 End Function
 
 Private Function GetTelemTable() As ListObject

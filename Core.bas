@@ -55,3 +55,14 @@ Public Function CopyState(ByRef s As State) As State
     For i = 1 To METRIC_COUNT: c.Chem(i) = s.Chem(i): c.Hidden(i) = s.Hidden(i): Next i
     CopyState = c
 End Function
+
+Public Function InitHiddenAtEquilibrium(ByRef s As State) As State
+    ' Initializes hidden layer at equilibrium with visible layer
+    ' Hidden mass = visible volume * visible concentration
+    Dim init As State, i As Long
+    init = CopyState(s)
+    For i = 1 To METRIC_COUNT
+        init.Hidden(i) = s.Vol * s.Chem(i)
+    Next i
+    InitHiddenAtEquilibrium = init
+End Function

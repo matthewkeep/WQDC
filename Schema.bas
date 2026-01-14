@@ -19,9 +19,7 @@ Public Const NAME_TRIGGER_VOL As String = "RR_TriggerVol"
 Public Const NAME_SAMPLE_DATE As String = "RR_SampleDate"
 Public Const NAME_RUN_DATE As String = "Run_Date"
 Public Const NAME_TAU As String = "Cfg_Tau"
-Public Const NAME_RAIN_FACTOR As String = "Cfg_RainFactor"
 Public Const NAME_SURFACE_FRACTION As String = "Cfg_SurfaceFrac"
-Public Const NAME_RAIN_MODE As String = "Cfg_RainMode"
 Public Const NAME_NET_OUT As String = "Cfg_NetOut"
 Public Const NAME_LIMIT_ROW As String = "Limit_Row"
 Public Const NAME_RES_ROW As String = "Res_Row"
@@ -29,6 +27,7 @@ Public Const NAME_ENHANCED_MODE As String = "Cfg_EnhancedMode"
 Public Const NAME_STD_TRIGGER As String = "Std_Trigger"
 Public Const NAME_ENH_TRIGGER As String = "Enh_Trigger"
 Public Const NAME_RESULT_VOL As String = "Result_Vol"
+Public Const NAME_PRED_ROW As String = "Pred_Row"
 Public Const NAME_HIDDEN_MASS As String = "RR_HiddenMass"
 Public Const NAME_MIXING_MODEL As String = "Cfg_MixingModel"
 Public Const NAME_RAINFALL_MODE As String = "Cfg_RainfallMode"
@@ -44,6 +43,7 @@ Public Const TABLE_TRIGGER As String = "tblTrigger"
 ' Per-site table prefixes (tables created on-demand)
 Public Const LOG_TABLE_PREFIX As String = "tblLog_"
 Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
+Public Const SEASON_LOG_PREFIX As String = "tblSeasonLog_"
 
 ' ==== Column Names ===========================================================
 ' IR table columns
@@ -85,6 +85,9 @@ Public Const COLOR_BUTTON_ON As Long = &H47AD70      ' #70AD47 - Button active
 ' Font colors
 Public Const COLOR_FONT_WHITE As Long = &HFFFFFF     ' #FFFFFF - White text
 
+' Log row colors
+Public Const COLOR_SAMPLE_DATE As Long = &HFFFFCC    ' #CCFFFF - Light cyan for sample date row
+
 ' ==== Table Styles ===========================================================
 Public Const TABLE_STYLE_DEFAULT As String = "TableStyleMedium2"
 Public Const TABLE_GAP_COLS As Long = 2  ' Empty columns between horizontal tables
@@ -107,10 +110,6 @@ Public Const RAINFALL_MODE_LIST As String = "Off,Hindcast,Hindcast+Forecast"
 Public Const TELEM_CAL_OFF As String = "Off"
 Public Const TELEM_CAL_ON As String = "On"
 Public Const TELEM_CAL_LIST As String = "Off,On"
-
-Public Const RAIN_MODE_CONSERVATIVE As String = "Conservative"
-Public Const RAIN_MODE_TYPICAL As String = "Typical"
-Public Const RAIN_MODE_LIST As String = "Conservative,Typical"
 
 ' ==== Chart Layout ===========================================================
 Public Const CHART_LEFT_POS As Double = 20
@@ -172,3 +171,41 @@ Public Function TelemVolColName(ByVal site As String) As String
     ' Returns telemetry Volume column name for site, e.g., "Vol (RP1)"
     TelemVolColName = "Vol (" & site & ")"
 End Function
+
+Public Function SeasonLogTableName(ByVal site As String) As String
+    ' Returns table name for site's season log table (e.g., "tblSeasonLog_RP1")
+    SeasonLogTableName = SEASON_LOG_PREFIX & site
+End Function
+
+' ==== Shared Worksheet/Table Helpers ========================================
+
+Public Function GetSheet(ByVal nm As String) As Worksheet
+    ' Returns worksheet by name, or Nothing if not found
+    On Error Resume Next
+    Set GetSheet = ThisWorkbook.Worksheets(nm)
+    On Error GoTo 0
+End Function
+
+Public Function GetTable(ByVal sheetName As String, ByVal tableName As String) As ListObject
+    ' Returns ListObject by sheet and table name, or Nothing if not found
+    Dim ws As Worksheet
+    Set ws = GetSheet(sheetName)
+    If Not ws Is Nothing Then
+        On Error Resume Next
+        Set GetTable = ws.ListObjects(tableName)
+        On Error GoTo 0
+    End If
+End Function
+
+Public Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
+    ' Case-insensitive site comparison
+    MatchesSite = (UCase$(Trim$(CStr(v))) = UCase$(Trim$(site)))
+End Function
+
+Public Sub StyleActionCell(ByVal cell As Range)
+    ' Applies blue hyperlink style to action cells
+    With cell
+        .Font.Color = COLOR_ACTION_FONT
+        .Font.Underline = xlUnderlineStyleSingle
+    End With
+End Sub
