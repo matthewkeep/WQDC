@@ -135,13 +135,16 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 ## Per-Site Architecture
 
 - **Live tables per site:** `tblLive_RP1`, `tblHistory_RP1`
-- **Live table structure:** Date-centric with Std/Enh side-by-side (27 columns)
-  - Date, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
+- **Live table structure:** Date-centric with Std/Enh side-by-side (28 columns)
+  - Date, Days, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
+  - Days: Relative to run date (0 = today, negative = past, positive = forecast)
   - Column names: `StdEC`, `StdF_U`, `EnhEC`, `EnhF_U`, `EnhHidEC`, `EnhHidF_U`, etc.
   - One row per date (UPSERT on run, not append)
   - All 7 chemistry metrics logged for Standard and Enhanced
   - Hidden layer stored for TwoBucket continuity between runs
   - Discrepancy columns (ErrVol/ErrEC) compare prediction vs telemetry
+  - Row shading: Sample date = light cyan, Run date = light green
+  - Triggered values: Red + bold formatting on triggered metric cell
 - **History table structure:**
   - Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
   - Action column: "Current" (latest) or "Rollback" (older runs)
@@ -164,9 +167,13 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Enhanced Off → greys all Enhanced settings (N9:O22)
   - Rainfall Off → greys Rain Factor (N11:O11)
   - Mixing Model Simple → greys Tau, Surface Fraction, Hidden Mass (N13:O22)
-- **Double-click toggles:** Enabled and Telemetry Cal cells toggle On/Off
+- **Double-click toggles:** Enabled, Telemetry Cal (On/Off), Pred Mode (Std/Enh)
 
-## Inputs Sheet Layout (Column N-O)
+## Inputs Sheet Layout
+
+**J5:** Pred_Mode toggle (Std/Enh) - controls which result displays in Predicted row (Row 5)
+
+**Column N-O (Enhanced Settings):**
 
 ```
 N7:  Enhanced (header)
@@ -181,6 +188,11 @@ N15: Hidden Mass       (header, greyed when Model=Simple)
 N16-N22: Chemistry labels (greyed when Model=Simple)
 O16-O22: Hidden mass values
 ```
+
+**Predicted Row (Row 5):**
+- B5: Volume, C5-I5: Chemistry metrics (Pred_Row named range)
+- J5: Pred_Mode toggle (Std/Enh) - double-click to switch
+- Triggered metric displays red + bold formatting
 
 ## History Table Actions
 
