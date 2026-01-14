@@ -208,14 +208,16 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     End If
     SetVal ws, targetName, txt
 
-    ' Only update predicted row and hidden mass for Standard run
+    ' Standard: update predicted row only (no hidden layer in Simple mode)
     If UCase$(runType) = "STANDARD" Then
-        ' Write predicted row (Row 5: B5=Vol, C5:I5=Chemistry) - values at trigger day
         ws.Cells(5, 2).Value = predState.Vol
         For i = 1 To Core.METRIC_COUNT
             ws.Cells(5, 2 + i).Value = predState.Chem(i)
         Next i
+    End If
 
+    ' Enhanced: save hidden mass for TwoBucket continuity between runs
+    If UCase$(runType) = "ENHANCED" Then
         Set rng = GetRng(ws, Schema.NAME_HIDDEN_MASS)
         If Not rng Is Nothing Then
             For i = 1 To Core.METRIC_COUNT
