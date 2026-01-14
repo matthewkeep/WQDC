@@ -22,8 +22,11 @@ Public Sub Build()
     SetupResults
     SetupTelemetry
     SetupChart
+    SetupLog
+    SetupHistory
+    ClearPerSiteTables
     SetupControls
-    ' Note: Log and History tables are created on-demand per site
+    ' Note: Per-site tables (tblLive_*, tblHistory_*) are created on-demand
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     Exit Sub
@@ -39,10 +42,12 @@ Public Sub Seed()
     Application.ScreenUpdating = False: Application.EnableEvents = False
     Application.Calculation = xlCalculationManual
 
-    SeedInput
+    ' Seed reference data first (Loader.LoadSiteData depends on these)
     SeedConfig
     SeedResults
     SeedTelemetry
+    ' Seed inputs last (calls Loader which reads from Config/Results)
+    SeedInput
 
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     Exit Sub
@@ -128,7 +133,7 @@ End Function
 Private Function EnsureSiteTelemColumns(ByVal site As String) As Boolean
     ' Adds EC and Vol columns for site to telemetry table if they don't exist
     ' Returns True if columns were added
-    Dim ws As Worksheet, tbl As ListObject
+    Dim ws As Worksheet, tbl As ListObject, col As ListColumn
     Dim ecCol As String, volCol As String
     Dim addedAny As Boolean
 
@@ -142,22 +147,22 @@ Private Function EnsureSiteTelemColumns(ByVal site As String) As Boolean
     volCol = Helpers.TelemVolColName(site)
 
     ' Add EC column if missing
-    On Error Resume Next
-    If tbl.ListColumns(ecCol) Is Nothing Then
+    Set col = Nothing
+    On Error Resume Next: Set col = tbl.ListColumns(ecCol): On Error GoTo 0
+    If col Is Nothing Then
         tbl.ListColumns.Add
         tbl.ListColumns(tbl.ListColumns.Count).Name = ecCol
         addedAny = True
     End If
-    On Error GoTo 0
 
     ' Add Vol column if missing
-    On Error Resume Next
-    If tbl.ListColumns(volCol) Is Nothing Then
+    Set col = Nothing
+    On Error Resume Next: Set col = tbl.ListColumns(volCol): On Error GoTo 0
+    If col Is Nothing Then
         tbl.ListColumns.Add
         tbl.ListColumns(tbl.ListColumns.Count).Name = volCol
         addedAny = True
     End If
-    On Error GoTo 0
 
     EnsureSiteTelemColumns = addedAny
 End Function
@@ -215,7 +220,7 @@ Private Sub SetupInput()
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
     ' Row 1-2: Reservoir headers
-    SetIfEmpty ws.Range("A1"), "Reservoir"
+    SetIfEmpty ws.Range("A1"), "RESERVOIR"
     AddNm Schema.NAME_SITE, ws.Range("A2")
     SetIfEmpty ws.Range("B2"), Schema.VOLUME_METRIC_NAME
     For i = 0 To n - 1: SetIfEmpty ws.Cells(2, 3 + i), chem(i): Next i
@@ -242,11 +247,11 @@ Private Sub SetupInput()
     AddNm Schema.NAME_PRED_MODE, ws.Range("J5")
 
     ' Row 7-8: Inputs table
-    SetIfEmpty ws.Range("A7"), "Inputs"
+    SetIfEmpty ws.Range("A7"), "INPUTS"
     EnsureIRTable ws, chem, n
 
     ' Column N-P: Results
-    SetIfEmpty ws.Range("N1"), "Results"
+    SetIfEmpty ws.Range("N1"), "RESULTS"
     SetIfEmpty ws.Range("N2"), "Mode"
     SetIfEmpty ws.Range("O2"), "Days"
     SetIfEmpty ws.Range("P2"), "Date"
@@ -264,7 +269,7 @@ Private Sub SetupInput()
     End If
 
     ' Column N-O: Enhanced section
-    SetIfEmpty ws.Range("N7"), "Enhanced"
+    SetIfEmpty ws.Range("N7"), "ENHANCED"
     SetIfEmpty ws.Range("N8"), "Enabled": AddNm Schema.NAME_ENHANCED_MODE, ws.Range("O8")
     SetIfEmpty ws.Range("N9"), "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("O9")
     SetIfEmpty ws.Range("N10"), "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("O10")
@@ -274,7 +279,7 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("N14"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O14")
 
     ' Column N-O: Hidden Mass section
-    SetIfEmpty ws.Range("N15"), "Hidden Mass"
+    SetIfEmpty ws.Range("N15"), "HIDDEN MASS"
     For i = 0 To n - 1: SetIfEmpty ws.Cells(16 + i, 14), chem(i): Next i
     AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O16").Resize(n, 1)
 
@@ -307,9 +312,7 @@ Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n 
             StyleActionHeader tbl, Schema.IR_COL_ACTION, "Add Input"
         End If
     End If
-
-    ' Apply conditional formatting for Active column (grey when No)
-    If Not tbl Is Nothing Then ApplyIRActiveConditionalFormat tbl
+    ' Note: Conditional formatting applied by Loader after data is populated
 End Sub
 
 ' ==== Config Sheet ===========================================================
@@ -319,10 +322,10 @@ Private Sub SetupConfig()
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
-    ws.Range("A1") = "Catalog": ws.Range("A1").Font.Bold = True
+    ws.Range("A1") = "CATALOG": ws.Range("A1").Font.Bold = True
     MakeTbl ws, ws.Range("A2"), Schema.TABLE_CATALOG, Array("RR", "IR", "Flow")
 
-    ws.Range("E1") = "Triggers": ws.Range("E1").Font.Bold = True
+    ws.Range("E1") = "TRIGGERS": ws.Range("E1").Font.Bold = True
     ReDim h(1 To n + 2): h(1) = "Preset": h(2) = Schema.VOLUME_METRIC_NAME
     For i = 1 To n: h(2 + i) = chem(i - 1): Next i
     MakeTbl ws, ws.Range("E2"), Schema.TABLE_TRIGGER, h
@@ -335,7 +338,7 @@ Private Sub SetupResults()
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
-    ws.Range("A1") = "Lab Results": ws.Range("A1").Font.Bold = True
+    ws.Range("A1") = "LAB RESULTS": ws.Range("A1").Font.Bold = True
     ReDim h(1 To n + 3): h(1) = "Site": h(2) = "Sample Date": h(3) = "Sample ID"
     For i = 1 To n: h(3 + i) = chem(i - 1): Next i
     MakeTbl ws, ws.Range("A2"), Schema.TABLE_RESULTS, h
@@ -349,7 +352,7 @@ Private Sub SetupTelemetry()
     ' Table placed at column L on Results sheet
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
-    ws.Range("L1") = "Telemetry": ws.Range("L1").Font.Bold = True
+    ws.Range("L1") = "TELEMETRY": ws.Range("L1").Font.Bold = True
     MakeTbl ws, ws.Range("L2"), Schema.TABLE_TELEMETRY, _
         Array(Schema.TELEM_COL_DATE, Schema.TELEM_COL_RAIN)
 End Sub
@@ -382,12 +385,8 @@ Private Sub SeedInput()
     ws.Range(Schema.NAME_RAINFALL_MODE) = Schema.RAINFALL_HINDCAST
     ws.Range(Schema.NAME_TELEM_CAL) = Schema.TELEM_CAL_ON
 
-    ' IR table will be populated by Loader when site is selected
-    Dim tbl As ListObject
-    Set tbl = ws.ListObjects(Schema.TABLE_IR)
-    If Not tbl Is Nothing Then
-        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
-    End If
+    ' Load IR data for seeded site
+    Loader.LoadSiteData "RP1"
 End Sub
 
 Private Sub SeedConfig()
@@ -771,8 +770,53 @@ End Sub
 Private Sub SetupChart()
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
-    ws.Range("A1") = "Simulation Charts": ws.Range("A1").Font.Bold = True
+    ws.Range("A1") = "SIMULATION CHARTS": ws.Range("A1").Font.Bold = True
     ws.Range("A2") = "Run WQOC.Run to generate charts"
+End Sub
+
+' ==== Log Sheet ===============================================================
+
+Private Sub SetupLog()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    ws.Range("A1") = "LOG": ws.Range("A1").Font.Bold = True
+End Sub
+
+' ==== RunHistory Sheet ========================================================
+
+Private Sub SetupHistory()
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    ws.Range("A1") = "RUN HISTORY": ws.Range("A1").Font.Bold = True
+End Sub
+
+Private Sub ClearPerSiteTables()
+    ' Clears all tblLive_* and tblHistory_* tables
+    Dim wsLog As Worksheet, wsHist As Worksheet
+    Dim tbl As ListObject
+
+    On Error Resume Next
+    Set wsLog = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
+    Set wsHist = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    On Error GoTo 0
+
+    ' Clear Live tables
+    If Not wsLog Is Nothing Then
+        For Each tbl In wsLog.ListObjects
+            If Left$(tbl.Name, 8) = "tblLive_" Then
+                If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+            End If
+        Next tbl
+    End If
+
+    ' Clear History tables
+    If Not wsHist Is Nothing Then
+        For Each tbl In wsHist.ListObjects
+            If Left$(tbl.Name, 11) = "tblHistory_" Then
+                If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+            End If
+        Next tbl
+    End If
 End Sub
 
 ' ==== Per-Site Table Creation (called on-demand) =============================
@@ -794,13 +838,9 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     ' Find position for new table (after existing tables)
     startCol = FindNextTableColumn(ws)
 
-    ' Add site label above table
-    ws.Cells(1, startCol).Value = site & " History"
-    ws.Cells(1, startCol).Font.Bold = True
-
     ' Create table (no Site column - site is in table name)
     ' Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
-    MakeTbl ws, ws.Cells(3, startCol), tblName, _
+    MakeTbl ws, ws.Cells(2, startCol), tblName, _
         Array("RunId", "Timestamp", "RunDate", "Days", "Mode", _
               "RainfallMode", "TelemCal", "Tau", "SurfaceFrac", "RainFactor", _
               "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
@@ -810,8 +850,8 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     If Not tbl Is Nothing Then
         StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
         StyleActionHeader tbl, Schema.HISTORY_COL_LOAD, ""
-        tbl.ListColumns(2).DataBodyRange.NumberFormat = "d/mm/yy hh:mm"  ' Timestamp
-        tbl.ListColumns(3).DataBodyRange.NumberFormat = "d/mm/yy"         ' RunDate
+        tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy hh:mm"  ' Timestamp
+        tbl.ListColumns(3).Range.NumberFormat = "d/mm/yy"         ' RunDate
     End If
 End Sub
 
@@ -875,10 +915,10 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     ' Create table with light style (starts row 2)
     MakeTblLight ws, ws.Cells(2, startCol), tblName, h
 
-    ' Format Date column
+    ' Format Date column (entire column including header to prepare for future data)
     Set tbl = ws.ListObjects(tblName)
     If Not tbl Is Nothing Then
-        tbl.ListColumns(1).DataBodyRange.NumberFormat = "d/mm/yy"
+        tbl.ListColumns(1).Range.NumberFormat = "d/mm/yy"
     End If
 End Sub
 
@@ -900,12 +940,8 @@ Public Sub EnsureSeasonLogTable(ByVal site As String)
     ' Find position for new table (after existing tables)
     startCol = FindNextTableColumn(ws)
 
-    ' Add site label above table
-    ws.Cells(1, startCol).Value = site & " Season Backtest"
-    ws.Cells(1, startCol).Font.Bold = True
-
     ' Create table with A/B comparison columns
-    MakeTbl ws, ws.Cells(3, startCol), tblName, _
+    MakeTbl ws, ws.Cells(2, startCol), tblName, _
         Array("RunDate", "SampleDate", "ActualEC", "ActualVol", _
               "StdPredEC", "StdErrEC", "StdPredVol", "StdErrVol", _
               "EnhPredEC", "EnhErrEC", "EnhPredVol", "EnhErrVol")
@@ -913,8 +949,8 @@ Public Sub EnsureSeasonLogTable(ByVal site As String)
     ' Format date columns
     Set tbl = ws.ListObjects(tblName)
     If Not tbl Is Nothing Then
-        tbl.ListColumns(1).DataBodyRange.NumberFormat = "d/mm/yy"  ' RunDate
-        tbl.ListColumns(2).DataBodyRange.NumberFormat = "d/mm/yy"  ' SampleDate
+        tbl.ListColumns(1).Range.NumberFormat = "d/mm/yy"  ' RunDate
+        tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy"  ' SampleDate
     End If
 End Sub
 
@@ -937,7 +973,7 @@ End Function
 ' ==== Controls (Run Cell, Dropdowns) =========================================
 
 Private Sub SetupControls()
-    Dim ws As Worksheet, runCell As Range
+    Dim ws As Worksheet, runCell As Range, loadCell As Range
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_INPUT)
 
     ' Remove old buttons if they exist
@@ -947,8 +983,29 @@ Private Sub SetupControls()
     ws.Shapes("btnRefresh").Delete
     On Error GoTo 0
 
-    ' Create Run cell (L4) - double-click to run
-    Set runCell = ws.Range("L4")
+    ' Clear and unmerge old button locations
+    ws.Range("K4:L5").UnMerge
+    ws.Range("K4:L5").ClearContents
+    ws.Range("K4:L5").Interior.ColorIndex = xlNone
+
+    ' Create Load Latest cell (K4:L4) - double-click to load
+    Set loadCell = ws.Range("K4:L4")
+    loadCell.Merge
+    loadCell.Value = "Load Latest"
+    With loadCell
+        .Font.Bold = True
+        .Font.Color = Schema.COLOR_FONT_WHITE
+        .Interior.Color = Schema.COLOR_BUTTON_ON
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .Borders.LineStyle = xlContinuous
+        .Borders.Weight = xlThin
+    End With
+    AddNm Schema.NAME_LOAD_CELL, ws.Range("K4")
+
+    ' Create Run cell (K5:L5) - double-click to run
+    Set runCell = ws.Range("K5:L5")
+    runCell.Merge
     runCell.Value = "Run"
     With runCell
         .Font.Bold = True
@@ -959,7 +1016,7 @@ Private Sub SetupControls()
         .Borders.LineStyle = xlContinuous
         .Borders.Weight = xlThin
     End With
-    AddNm Schema.NAME_RUN_CELL, runCell
+    AddNm Schema.NAME_RUN_CELL, ws.Range("K5")
 
     ' Site dropdown validation (from tblCatalog RR column)
     With ws.Range(Schema.NAME_SITE).Validation
@@ -1016,25 +1073,26 @@ Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal model
     End With
 End Sub
 
-Private Sub ApplyIRActiveConditionalFormat(ByVal tbl As ListObject)
+Public Sub ApplyIRActiveConditionalFormat(ByVal tbl As ListObject)
     ' Greys out IR table rows when Active column = "No"
+    ' Applied to DataBodyRange - Excel auto-extends to new table rows
+    ' Call this after IR table has data (from Loader.PopulateIRFromCatalog)
     Dim activeCol As Long, fc As FormatCondition
-    Dim dataRng As Range, activeColLetter As String
+    Dim activeColLetter As String
 
     activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol = 0 Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
-    Set dataRng = tbl.DataBodyRange
-
-    ' Clear existing conditional formatting on table data
-    dataRng.FormatConditions.Delete
-
-    ' Get column letter for Active column (relative reference for each row)
+    ' Get column letter for Active column
     activeColLetter = Split(tbl.ListColumns(activeCol).DataBodyRange.Cells(1, 1).Address, "$")(1)
 
+    ' Clear existing conditional formatting on table data
+    tbl.DataBodyRange.FormatConditions.Delete
+
     ' Apply conditional format: grey when Active <> "Yes"
-    Set fc = dataRng.FormatConditions.Add(Type:=xlExpression, _
+    ' Formula uses relative row reference so Excel auto-adjusts for each row
+    Set fc = tbl.DataBodyRange.FormatConditions.Add(Type:=xlExpression, _
         Formula1:="=$" & activeColLetter & tbl.DataBodyRange.Row & "<>""Yes""")
     With fc
         .Font.Color = RGB(180, 180, 180)  ' Grey text

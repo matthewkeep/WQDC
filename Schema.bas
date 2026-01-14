@@ -78,6 +78,7 @@ Public Const VOLUME_METRIC_NAME As String = "Volume (ML)"
 
 ' ==== Action Cell Constants ==================================================
 Public Const NAME_RUN_CELL As String = "Run_Simulation"
+Public Const NAME_LOAD_CELL As String = "Load_Latest"
 Public Const ACTION_ADD As String = "Add"
 Public Const ACTION_REMOVE As String = "Remove"
 Public Const ACTION_ROLLBACK As String = "Rollback"

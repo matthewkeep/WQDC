@@ -50,7 +50,7 @@ End Sub
 
 Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Handle double-clicks on Inputs sheet
-    Dim ws As Worksheet, runCell As Range, tbl As ListObject
+    Dim ws As Worksheet, runCell As Range, loadCell As Range, tbl As ListObject
     Dim actionCol As Long, rowIdx As Long
 
     Set ws = Target.Worksheet
@@ -63,6 +63,18 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
         If Not Intersect(Target, runCell) Is Nothing Then
             Cancel = True
             WQOC.Run
+            Exit Sub
+        End If
+    End If
+
+    ' Check Load Latest cell
+    On Error Resume Next
+    Set loadCell = ws.Range(Schema.NAME_LOAD_CELL)
+    On Error GoTo 0
+    If Not loadCell Is Nothing Then
+        If Not Intersect(Target, loadCell) Is Nothing Then
+            Cancel = True
+            Loader.LoadLatest
             Exit Sub
         End If
     End If
@@ -184,10 +196,14 @@ End Sub
 Private Sub AddIRRow(ByVal tbl As ListObject)
     ' Add a new empty row to IR table with "Remove" action and Active=Yes
     Dim newRow As ListRow, activeCol As Long
+    Dim isFirstRow As Boolean
+    isFirstRow = (tbl.DataBodyRange Is Nothing)
     Set newRow = tbl.ListRows.Add
     activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
     Helpers.InitIRRowAction newRow.Range, tbl
+    ' Apply conditional formatting on first row (Excel auto-extends to subsequent rows)
+    If isFirstRow Then Setup.ApplyIRActiveConditionalFormat tbl
 End Sub
 
 Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
