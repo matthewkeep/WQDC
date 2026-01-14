@@ -138,12 +138,11 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
     Dim enhVolCol As Long, enhECCol As Long
     Dim stdVolCol As Long, stdECCol As Long
 
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If Not Helpers.HasData(tbl) Then Exit Sub
 
     ' Get telemetry table
-    Set tblTelem = Helpers.GetTable(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
+    Set tblTelem = Helpers.WithTableData(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
     If tblTelem Is Nothing Then Exit Sub
-    If tblTelem.DataBodyRange Is Nothing Then Exit Sub
 
     ' Get telemetry column indices for this site
     ecCol = Helpers.ColIdx(tblTelem, Helpers.TelemECColName(site))
@@ -205,7 +204,7 @@ End Sub
 Private Sub ApplyRowShading(ByVal tbl As ListObject, ByVal sampleDate As Date, ByVal runDate As Date)
     ' Applies background color to sample date and run date rows
     Dim i As Long, rowDate As Date
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If Not Helpers.HasData(tbl) Then Exit Sub
 
     For i = 1 To tbl.ListRows.Count
         rowDate = tbl.DataBodyRange.Cells(i, 1).Value
@@ -300,8 +299,7 @@ Public Sub DeleteAfterDate(ByVal cutoffDate As Date, ByVal site As String)
     Dim i As Long, rowDate As Date
 
     Set tbl = GetLiveTable(site)
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If Not Helpers.HasData(tbl) Then Exit Sub
 
     ' Delete from bottom up to avoid index issues
     For i = tbl.ListRows.Count To 1 Step -1
@@ -329,8 +327,7 @@ Public Function GetLatestLogDate(ByVal site As String) As Date
     Dim i As Long, d As Date, maxDate As Date
 
     Set tbl = GetLiveTable(site)
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Not Helpers.HasData(tbl) Then Exit Function
 
     maxDate = 0
     For i = 1 To tbl.ListRows.Count

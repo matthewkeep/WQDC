@@ -60,6 +60,26 @@ Public Function GetTable(ByVal sheetName As String, ByVal tableName As String) A
     End If
 End Function
 
+Public Function WithTableData(ByVal sheetName As String, ByVal tableName As String) As ListObject
+    ' Returns table only if it exists AND has data rows, else Nothing
+    ' Replaces the common pattern:
+    '   Set tbl = GetTable(...): If tbl Is Nothing Then Exit
+    '   If tbl.DataBodyRange Is Nothing Then Exit
+    Dim tbl As ListObject
+    Set tbl = GetTable(sheetName, tableName)
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    Set WithTableData = tbl
+End Function
+
+Public Function HasData(ByVal tbl As ListObject) As Boolean
+    ' Returns True if table exists and has data rows
+    ' Use: If Not HasData(tbl) Then Exit Function
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    HasData = True
+End Function
+
 Public Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
     ' Case-insensitive site comparison
     MatchesSite = (UCase$(Trim$(CStr(v))) = UCase$(Trim$(site)))

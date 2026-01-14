@@ -319,8 +319,7 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
     On Error Resume Next
     Set tbl = ws.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Not Helpers.HasData(tbl) Then Exit Function
 
     ' Find row for target date
     rowIdx = FindLogRowByDate(tbl, targetDate)
@@ -370,8 +369,7 @@ Public Function HasLogDataForDate(ByVal site As String, ByVal targetDate As Date
     On Error Resume Next
     Set tbl = ws.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Not Helpers.HasData(tbl) Then Exit Function
 
     HasLogDataForDate = (FindLogRowByDate(tbl, targetDate) > 0)
 End Function

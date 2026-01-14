@@ -47,8 +47,7 @@ Public Function GetLatestEC(ByVal beforeDate As Date, ByVal site As String) As V
     Dim ecCol As Long
 
     Set tbl = GetTelemTable()
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Not Helpers.HasData(tbl) Then Exit Function
 
     ecCol = Helpers.ColIdx(tbl, Helpers.TelemECColName(site))
     If ecCol = 0 Then Exit Function
@@ -75,8 +74,7 @@ Public Function GetLatestVol(ByVal beforeDate As Date, ByVal site As String) As 
     Dim volCol As Long
 
     Set tbl = GetTelemTable()
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
+    If Not Helpers.HasData(tbl) Then Exit Function
 
     volCol = Helpers.ColIdx(tbl, Helpers.TelemVolColName(site))
     If volCol = 0 Then Exit Function
@@ -116,8 +114,7 @@ Private Function LookupValue(ByVal d As Date, ByVal col As Long) As Variant
     Dim tbl As ListObject, rowIdx As Variant
 
     Set tbl = GetTelemTable()
-    If tbl Is Nothing Then LookupValue = Empty: Exit Function
-    If tbl.DataBodyRange Is Nothing Then LookupValue = Empty: Exit Function
+    If Not Helpers.HasData(tbl) Then LookupValue = Empty: Exit Function
 
     rowIdx = Application.Match(CDbl(d), tbl.ListColumns(1).DataBodyRange, 0)
     If IsError(rowIdx) Then
