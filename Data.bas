@@ -54,6 +54,32 @@ Public Function LoadState() As State
     On Error GoTo 0
 End Function
 
+Public Function SnapState(ByRef s As State, ByVal site As String) As State
+    ' Calibrates state by snapping to latest telemetry readings
+    ' Replaces Vol and EC with observed values if available
+    Dim snapped As State, latestVol As Variant, latestEC As Variant
+    snapped = Core.CopyState(s)
+
+    latestVol = Telemetry.GetLatestVol(Date, site)
+    latestEC = Telemetry.GetLatestEC(Date, site)
+
+    If Not IsEmpty(latestVol) Then snapped.Vol = CDbl(latestVol)
+    If Not IsEmpty(latestEC) Then snapped.Chem(1) = CDbl(latestEC)
+
+    SnapState = snapped
+End Function
+
+Public Function GetTelemCalEnabled() As Boolean
+    ' Returns True if telemetry calibration is enabled
+    Dim ws As Worksheet
+    Set ws = GetSheet(Schema.SHEET_INPUT)
+    If Not ws Is Nothing Then
+        On Error Resume Next
+        GetTelemCalEnabled = (UCase$(Trim$(ws.Range(Schema.NAME_TELEM_CAL).Value)) = "ON")
+        On Error GoTo 0
+    End If
+End Function
+
 Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Config
     ' Loads config for Standard or Enhanced run
     ' Standard: Simple mode, no rainfall adjustment, no telemetry calibration
@@ -65,6 +91,7 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     If ws Is Nothing Then Exit Function
 
     ' Common config
+    cfg.Site = site
     cfg.Days = Schema.DEFAULT_FORECAST_DAYS
     cfg.StartDate = Val(GetVal(ws, Schema.NAME_SAMPLE_DATE))
     cfg.Tau = Val(GetVal(ws, Schema.NAME_TAU))
@@ -98,11 +125,12 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
             cfg.Mode = "Simple"
         End If
 
-        ' TODO: Rainfall adjustment and telemetry calibration not yet implemented
-        ' These settings are read but not applied until Sim.bas supports them
+        ' Set rainfall mode (applied per-day in Sim.Run)
+        cfg.RainfallMode = rainfallMode
     Else
         ' Standard: Simple mode, no rainfall, no calibration
         cfg.Mode = "Simple"
+        cfg.RainfallMode = Schema.RAINFALL_OFF
     End If
 
     LoadConfig = cfg

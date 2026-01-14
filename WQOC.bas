@@ -53,6 +53,12 @@ Public Sub Run()
     ' Run Enhanced if enabled
     If enhancedMode Then
         cfgEnh = Data.LoadConfig(site, "Enhanced")
+
+        ' Apply telemetry calibration (snap to latest observed values) if enabled
+        If Data.GetTelemCalEnabled() Then
+            s = Data.SnapState(s, site)
+        End If
+
         rEnh = Sim.Run(s, cfgEnh)
         runIdEnh = MakeRunId("ENH", site)
         SimLog.WriteLog rEnh, cfgEnh, runIdEnh, site

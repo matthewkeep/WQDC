@@ -15,12 +15,14 @@ End Type
 
 Public Type Config
     Mode As String
+    Site As String
     Days As Long
     StartDate As Date
     Tau As Double
     Inflow As Double
     Outflow As Double
     RainVol As Double
+    RainfallMode As String
     SurfaceFrac As Double
     InflowChem(1 To 7) As Double
     TriggerVol As Double
