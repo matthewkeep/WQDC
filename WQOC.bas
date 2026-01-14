@@ -147,16 +147,6 @@ Private Function MakeRunId(ByVal prefix As String, ByVal site As String) As Stri
     MakeRunId = baseId & "-" & Format$(seq, "000")
 End Function
 
-Public Function GetTrigDay() As Long
-    Dim s As State, cfg As Config, r As Result, site As String
-    site = Data.GetSite()
-    If Len(site) = 0 Then Exit Function
-    s = Data.LoadState()
-    cfg = Data.LoadConfig(site, "Standard")
-    r = Sim.Run(s, cfg)
-    GetTrigDay = r.TriggerDay
-End Function
-
 ' ==== Chart Generation =======================================================
 
 Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd As Result, ByRef rEnh As Result, ByVal hasEnhanced As Boolean)
