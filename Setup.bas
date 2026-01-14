@@ -259,10 +259,10 @@ Private Sub MakeIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As
     h(n + 5) = Schema.IR_COL_ACTION
     MakeTbl ws, ws.Range("A9"), Schema.TABLE_IR, h
 
-    ' Set action column header text (no blue styling - table style has blue background)
+    ' Style action column header (keep column name as "Action" for event lookup)
     Set tbl = ws.ListObjects(Schema.TABLE_IR)
     If Not tbl Is Nothing Then
-        tbl.ListColumns(Schema.IR_COL_ACTION).Name = Schema.ACTION_ADD
+        StyleActionHeader tbl, Schema.IR_COL_ACTION, ""
     End If
 End Sub
 
