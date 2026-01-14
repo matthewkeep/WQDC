@@ -2,6 +2,13 @@ Option Explicit
 ' Setup: Workbook scaffolding and test data.
 ' Dependencies: Schema
 
+Public Sub RepairEvents()
+    ' Resets Application state - call if events stop working after an error
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+End Sub
+
 Public Sub Build()
     Dim cm As XlCalculation
     On Error GoTo Fail
@@ -46,7 +53,7 @@ Fail:
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
-Public Sub BuildAll(): Build: Seed: Initialize: End Sub
+Public Sub BuildAll(): RepairEvents: Build: Seed: Initialize: End Sub
 
 Public Sub Initialize()
     ' Reads all RR sites from tblCatalog and creates per-site infrastructure:
@@ -56,6 +63,7 @@ Public Sub Initialize()
     ' Safe to run multiple times - only creates what doesn't exist
     Dim cm As XlCalculation, sites As Variant, site As Variant
     Dim created As Long
+    RepairEvents  ' Ensure clean state before starting
     On Error GoTo Fail
     cm = Application.Calculation
     Application.ScreenUpdating = False: Application.EnableEvents = False
