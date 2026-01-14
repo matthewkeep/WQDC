@@ -138,6 +138,7 @@ Cleanup:
     Application.ScreenUpdating = True
     Application.EnableEvents = True
     If Err.Number <> 0 Then
+        Error.TraceErr "Backtest.RunSeason"
         MsgBox "Error: " & Err.Description, vbExclamation, "Backtest"
     End If
 End Sub

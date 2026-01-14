@@ -32,6 +32,7 @@ Public Sub Build()
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    Error.TraceErr "Setup.Build"
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
@@ -53,6 +54,7 @@ Public Sub Seed()
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    Error.TraceErr "Setup.Seed"
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
@@ -102,6 +104,7 @@ Done:
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
+    Error.TraceErr "Setup.Initialize"
     MsgBox "Error: " & Err.Description, vbExclamation, "Initialize"
 End Sub
 
@@ -520,6 +523,7 @@ Fail:
     Application.Calculation = cm
     Application.ScreenUpdating = True
     Application.EnableEvents = True
+    Error.TraceErr "Setup.SeedFull"
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
