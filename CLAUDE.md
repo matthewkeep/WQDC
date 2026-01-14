@@ -58,6 +58,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **SimLog.bas** | Date-centric live log (UPSERT to tblLive) |
 | **Loader.bas** | Site selection, IR/chemistry population |
 | **Events.bas** | Worksheet handlers, double-click toggles, action dispatching |
+| **EventBus.bas** | Centralized event dispatch (SampleDateChanged, SiteChanged) |
 | **WQOC.bas** | Entry point, orchestration, chart generation |
 | **Schema.bas** | Constants only (names, colors, defaults) |
 | **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, styling, range access) |

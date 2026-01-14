@@ -1,6 +1,6 @@
 Option Explicit
 ' Events: Worksheet event handlers.
-' Dependencies: Loader, Schema, WQOC, History
+' Dependencies: Loader, Schema, WQOC, History, EventBus
 '
 ' NOTE: To enable events, add this code to each sheet module
 ' (right-click sheet tab > View Code):
@@ -22,26 +22,27 @@ Option Explicit
 
 Public Sub OnInputsChange(ByVal Target As Range)
     ' Called from Inputs sheet Worksheet_Change event
+    ' Delegates to EventBus for decoupled handling
     Dim siteRng As Range, sampleDateRng As Range
     On Error Resume Next
     Set siteRng = Target.Worksheet.Range(Schema.NAME_SITE)
     Set sampleDateRng = Target.Worksheet.Range(Schema.NAME_SAMPLE_DATE)
     On Error GoTo 0
 
-    ' Site change: reload IR data
+    ' Site change
     If Not siteRng Is Nothing Then
         If Not Intersect(Target, siteRng) Is Nothing Then
             Loader.LoadSiteData CStr(Target.Value)
+            EventBus.Notify EventBus.EVENT_SITE_CHANGED, CStr(Target.Value)
             Exit Sub
         End If
     End If
 
-    ' Sample date change: load hidden mass from log for user feedback
+    ' Sample date change
     If Not sampleDateRng Is Nothing Then
         If Not Intersect(Target, sampleDateRng) Is Nothing Then
-            If Not siteRng Is Nothing Then
-                Data.LoadHiddenForDate CStr(siteRng.Value), CDate(Target.Value)
-            End If
+            EventBus.Notify EventBus.EVENT_SAMPLE_DATE_CHANGED
+            Exit Sub
         End If
     End If
 End Sub
@@ -252,14 +253,21 @@ End Sub
 
 Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
     ' Toggle On/Off for named range if clicked; returns True if handled
-    Dim rng As Range
+    Dim rng As Range, newValue As String
     On Error Resume Next
     Set rng = ws.Range(nm)
     On Error GoTo 0
     If rng Is Nothing Then Exit Function
     If Intersect(Target, rng) Is Nothing Then Exit Function
 
-    rng.Value = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
+    newValue = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
+    rng.Value = newValue
+
+    ' Fire event for Enhanced mode changes
+    If nm = Schema.NAME_ENHANCED_MODE Then
+        EventBus.Notify EventBus.EVENT_ENHANCED_MODE_CHANGED, newValue
+    End If
+
     ToggleOnOff = True
 End Function
 
