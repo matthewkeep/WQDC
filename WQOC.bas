@@ -173,7 +173,7 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
 
     ' Get live table for site
     On Error Resume Next
-    Set tbl = wsLog.ListObjects(Schema.LiveTableName(site))
+    Set tbl = wsLog.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
     If tbl Is Nothing Then Exit Sub
     If tbl.DataBodyRange Is Nothing Then Exit Sub
@@ -183,10 +183,10 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
 
     ' Get column indices
     dateCol = 1  ' Date is always first column
-    stdVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
-    stdECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
-    enhVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
-    enhECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
+    stdVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
+    stdECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
+    enhVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
+    enhECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
 
     ' Build arrays from live table
     ReDim dates(1 To n)

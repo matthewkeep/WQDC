@@ -8,19 +8,24 @@ Option Explicit
 Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As String, ByVal site As String)
     ' Records run metadata to site's history table. RunId must match SimLog entry.
     ' New columns (RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor) for config versioning
-    Dim tbl As ListObject, row As ListRow, i As Long, actionCol As Long
+    Dim tbl As ListObject, row As ListRow, i As Long, actionCol As Long, loadCol As Long
 
     Set tbl = GetHistoryTable(site)
     If tbl Is Nothing Then Exit Sub
 
-    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
     If actionCol = 0 Then Exit Sub
 
-    ' Update existing rows' action to "Rollback"
+    ' Update existing rows' action to "Rollback" and ensure Load is set
     If Not tbl.DataBodyRange Is Nothing Then
         For i = 1 To tbl.ListRows.Count
             tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
-            Schema.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
+            Helpers.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
+            If loadCol > 0 Then
+                tbl.DataBodyRange.Cells(i, loadCol).Value = "Load"
+                Helpers.StyleActionCell tbl.DataBodyRange.Cells(i, loadCol)
+            End If
         Next i
     End If
 
@@ -41,16 +46,62 @@ Public Sub RecordRun(ByRef cfg As Config, ByRef r As Result, ByVal runId As Stri
         WriteColIfExists tbl, row, "TriggerDay", r.TriggerDay
         WriteColIfExists tbl, row, "TriggerMetric", r.TriggerMetric
         .Cells(1, actionCol).Value = Schema.ACTION_CURRENT
-        Schema.StyleActionCell .Cells(1, actionCol)
+        Helpers.StyleActionCell .Cells(1, actionCol)
+        If loadCol > 0 Then
+            .Cells(1, loadCol).Value = "Load"
+            Helpers.StyleActionCell .Cells(1, loadCol)
+        End If
     End With
 End Sub
 
 Private Sub WriteColIfExists(ByVal tbl As ListObject, ByVal row As ListRow, ByVal colName As String, ByVal v As Variant)
     ' Writes value to column if it exists (for backward compatibility with old tables)
     Dim col As Long
-    col = Schema.ColIdx(tbl, colName)
+    col = Helpers.ColIdx(tbl, colName)
     If col > 0 Then row.Range.Cells(1, col).Value = v
 End Sub
+
+Private Function ReadColIfExists(ByVal tbl As ListObject, ByVal rowIdx As Long, ByVal colName As String) As Variant
+    ' Reads value from column if it exists (for backward compatibility with old tables)
+    Dim col As Long
+    col = Helpers.ColIdx(tbl, colName)
+    If col > 0 Then ReadColIfExists = tbl.DataBodyRange.Cells(rowIdx, col).Value
+End Function
+
+Public Function LoadSettings(ByVal runId As String, ByVal site As String) As Boolean
+    ' Restores config from history row to Inputs sheet (no deletion, no run)
+    ' Setting Sample Date triggers hidden mass load via Events.OnInputsChange
+    Dim tbl As ListObject, ws As Worksheet, i As Long, rowIdx As Long
+
+    Set tbl = GetHistoryTable(site)
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+
+    ' Find row by RunId
+    For i = 1 To tbl.ListRows.Count
+        If tbl.DataBodyRange.Cells(i, 1).Value = runId Then
+            rowIdx = i
+            Exit For
+        End If
+    Next i
+    If rowIdx = 0 Then Exit Function
+
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
+    If ws Is Nothing Then Exit Function
+
+    ' Restore settings to Inputs sheet
+    On Error Resume Next
+    ws.Range(Schema.NAME_SAMPLE_DATE).Value = tbl.DataBodyRange.Cells(rowIdx, 3).Value  ' RunDate
+    ws.Range(Schema.NAME_MIXING_MODEL).Value = tbl.DataBodyRange.Cells(rowIdx, 5).Value  ' Mode
+    ws.Range(Schema.NAME_RAINFALL_MODE).Value = ReadColIfExists(tbl, rowIdx, "RainfallMode")
+    ws.Range(Schema.NAME_TELEM_CAL).Value = ReadColIfExists(tbl, rowIdx, "TelemCal")
+    ws.Range(Schema.NAME_TAU).Value = ReadColIfExists(tbl, rowIdx, "Tau")
+    ws.Range(Schema.NAME_SURFACE_FRACTION).Value = ReadColIfExists(tbl, rowIdx, "SurfaceFrac")
+    ws.Range(Schema.NAME_RAIN_FACTOR).Value = ReadColIfExists(tbl, rowIdx, "RainFactor")
+    On Error GoTo 0
+
+    LoadSettings = True
+End Function
 
 Public Function GetLastRun(ByVal site As String) As Variant
     ' Returns last run's row data for site
@@ -100,10 +151,10 @@ Public Function RollbackLast(ByVal site As String) As Boolean
     ' Update new last row to Current
     If tbl.ListRows.Count > 0 Then
         Dim actionCol As Long
-        actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+        actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
         If actionCol > 0 Then
             tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol).Value = Schema.ACTION_CURRENT
-            Schema.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
+            Helpers.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
         End If
     End If
 
@@ -145,10 +196,10 @@ Public Function RollbackTo(ByVal targetRunId As String, ByVal site As String) As
     ' Update target row to Current
     If tbl.ListRows.Count > 0 Then
         Dim actionCol As Long
-        actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+        actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
         If actionCol > 0 Then
             tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol).Value = Schema.ACTION_CURRENT
-            Schema.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
+            Helpers.StyleActionCell tbl.DataBodyRange.Cells(tbl.ListRows.Count, actionCol)
         End If
     End If
 
@@ -167,8 +218,8 @@ Public Function GetRunHistory(ByVal site As String) As Variant
     If tbl.ListRows.Count = 0 Then Exit Function
 
     ' Get column indices (handles old and new table layouts)
-    trigDayCol = Schema.ColIdx(tbl, "TriggerDay")
-    trigMetricCol = Schema.ColIdx(tbl, "TriggerMetric")
+    trigDayCol = Helpers.ColIdx(tbl, "TriggerDay")
+    trigMetricCol = Helpers.ColIdx(tbl, "TriggerMetric")
 
     ' Build result array
     ReDim result(1 To tbl.ListRows.Count, 1 To 5)
@@ -194,7 +245,7 @@ Private Function GetHistoryTable(ByVal site As String) As ListObject
     On Error GoTo 0
     If ws Is Nothing Then Exit Function
 
-    tblName = Schema.HistoryTableName(site)
+    tblName = Helpers.HistoryTableName(site)
 
     ' Try to get existing table
     On Error Resume Next

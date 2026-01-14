@@ -37,9 +37,9 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
 
         ' Write Standard columns
         With tbl.DataBodyRange
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)) = r.Snaps(i).Vol
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_STD_EC)) = r.Snaps(i).Chem(1)
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)) = r.Snaps(i).Vol
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)) = r.Snaps(i).Chem(1)
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
         End With
     Next i
 
@@ -70,16 +70,16 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
 
         ' Write Enhanced columns
         With tbl.DataBodyRange
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)) = r.Snaps(i).Vol
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)) = r.Snaps(i).Chem(1)
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)) = r.Snaps(i).Vol
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)) = r.Snaps(i).Chem(1)
 
             ' Write hidden layer (for TwoBucket continuity)
             For j = 1 To Core.METRIC_COUNT
-                hidCol = Schema.ColIdx(tbl, Schema.EnhHidColName(j))
+                hidCol = Helpers.ColIdx(tbl, Helpers.EnhHidColName(j))
                 If hidCol > 0 Then .Cells(rowIdx, hidCol) = r.Snaps(i).Hidden(j)
             Next j
 
-            .Cells(rowIdx, Schema.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
+            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
         End With
     Next i
 
@@ -103,22 +103,22 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
     ' Get telemetry table
-    Set tblTelem = Schema.GetTable(Schema.SHEET_TELEMETRY, Schema.TABLE_TELEMETRY)
+    Set tblTelem = Helpers.GetTable(Schema.SHEET_TELEMETRY, Schema.TABLE_TELEMETRY)
     If tblTelem Is Nothing Then Exit Sub
     If tblTelem.DataBodyRange Is Nothing Then Exit Sub
 
     ' Get telemetry column indices for this site
-    ecCol = Schema.ColIdx(tblTelem, Schema.TelemECColName(site))
-    volCol = Schema.ColIdx(tblTelem, Schema.TelemVolColName(site))
+    ecCol = Helpers.ColIdx(tblTelem, Helpers.TelemECColName(site))
+    volCol = Helpers.ColIdx(tblTelem, Helpers.TelemVolColName(site))
     If ecCol = 0 And volCol = 0 Then Exit Sub  ' No telemetry columns for this site
 
     ' Get live table column indices
-    errVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ERR_VOL)
-    errECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ERR_EC)
-    enhVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
-    enhECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
-    stdVolCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
-    stdECCol = Schema.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
+    errVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ERR_VOL)
+    errECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ERR_EC)
+    enhVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
+    enhECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_EC)
+    stdVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
+    stdECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
 
     ' Process each row in live table
     For i = 1 To tbl.ListRows.Count
@@ -282,7 +282,7 @@ Private Function GetLiveTable(ByVal site As String) As ListObject
     On Error GoTo 0
     If ws Is Nothing Then Exit Function
 
-    tblName = Schema.LiveTableName(site)
+    tblName = Helpers.LiveTableName(site)
 
     ' Try to get existing table
     On Error Resume Next

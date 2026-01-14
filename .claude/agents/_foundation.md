@@ -41,24 +41,29 @@ OK: uncommitted work, multiple tasks, backburner items.
 ## Memory Protocol
 
 **Sources of truth:**
-- CLAUDE.md → architecture, session context, pending items
-- _gotchas.md → accumulated learnings, VBA quirks, project patterns
+- CLAUDE.md → architecture, flows, module responsibilities, sheet layouts
+- _gotchas.md → accumulated learnings, VBA quirks, project patterns, anti-patterns
 - TodoWrite → active task tracking
 - Git commits → decisions and rationale
 
 **Before fixing/cleaning:** Check _gotchas.md for known issues and patterns.
 
+**Key documentation sections:**
+- CLAUDE.md "Architecture" → module layers, dependency graph
+- CLAUDE.md "Key Flows" → Run, Rollback, LoadSettings sequences
+- CLAUDE.md "Inputs Sheet Layout" → cell positions for Enhanced config
+- _gotchas.md "Module Responsibilities" → what goes where
+
 **During session:**
 - Use TodoWrite for multi-step tasks
-- Update CLAUDE.md Session Context for key decisions
 - Reference CLAUDE.md, don't re-analyze codebase
+- Check _gotchas.md before adding helper functions
 
 **When switching tasks:**
 - Mark current task Paused in TodoWrite
-- Note why in Session Context if significant
+- Note why if significant
 
 **When resuming:**
-- Check CLAUDE.md Session Context
 - Check TodoWrite for pending items
 - User can say "status" or "where were we"
 

@@ -186,10 +186,10 @@ Private Function GetAllSamples(ByVal site As String) As Variant
     ' Collect all samples for this site
     Set dict = New DictionaryShim
     For Each row In tbl.ListRows
-        If Schema.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
+        If Helpers.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
             On Error Resume Next
             sampleDate = CDate(row.Range.Cells(1, 2).Value)
-            ec = Val(row.Range.Cells(1, Schema.ColIdx(tbl, Schema.ChemistryNames()(0))).Value)
+            ec = Val(row.Range.Cells(1, Helpers.ColIdx(tbl, Schema.ChemistryNames()(0))).Value)
             On Error GoTo 0
 
             If sampleDate > 0 And Not dict.Exists(CLng(sampleDate)) Then
@@ -256,14 +256,14 @@ Private Function LoadStateAtDate(ByVal site As String, ByVal sampleDate As Date)
     chem = Schema.ChemistryNames()
 
     For Each row In tbl.ListRows
-        If Schema.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
+        If Helpers.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
             On Error Resume Next
             rowDate = CDate(row.Range.Cells(1, 2).Value)
             On Error GoTo 0
 
             If rowDate = sampleDate Then
                 For i = 0 To Core.METRIC_COUNT - 1
-                    s.Chem(i + 1) = Val(row.Range.Cells(1, Schema.ColIdx(tbl, chem(i))).Value)
+                    s.Chem(i + 1) = Val(row.Range.Cells(1, Helpers.ColIdx(tbl, chem(i))).Value)
                 Next i
 
                 vol = Telemetry.GetLatestVol(sampleDate, site)
@@ -330,7 +330,7 @@ Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As
     chem = Schema.ChemistryNames()
 
     For Each catRow In tblCat.ListRows
-        If Schema.MatchesSite(catRow.Range.Cells(1, 1).Value, site) Then
+        If Helpers.MatchesSite(catRow.Range.Cells(1, 1).Value, site) Then
             irSite = Trim$(catRow.Range.Cells(1, 2).Value)
             flow = Val(catRow.Range.Cells(1, 3).Value)
 
@@ -362,7 +362,7 @@ Private Function GetLabDataBeforeDate(ByVal irSite As String, ByVal beforeDate A
 
     latestDate = 0
     For Each row In tbl.ListRows
-        If Schema.MatchesSite(row.Range.Cells(1, 1).Value, irSite) Then
+        If Helpers.MatchesSite(row.Range.Cells(1, 1).Value, irSite) Then
             On Error Resume Next
             rowDate = CDate(row.Range.Cells(1, 2).Value)
             On Error GoTo 0
@@ -378,7 +378,7 @@ Private Function GetLabDataBeforeDate(ByVal irSite As String, ByVal beforeDate A
 
     ReDim result(1 To Core.METRIC_COUNT)
     For i = 0 To Core.METRIC_COUNT - 1
-        result(i + 1) = Val(latestRow.Range.Cells(1, Schema.ColIdx(tbl, chem(i))).Value)
+        result(i + 1) = Val(latestRow.Range.Cells(1, Helpers.ColIdx(tbl, chem(i))).Value)
     Next i
 
     GetLabDataBeforeDate = result
@@ -441,7 +441,7 @@ Private Function GetSeasonLogTable(ByVal site As String) As ListObject
     Dim ws As Worksheet, tblName As String
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    tblName = Schema.SeasonLogTableName(site)
+    tblName = Helpers.SeasonLogTableName(site)
     If Not ws Is Nothing Then Set GetSeasonLogTable = ws.ListObjects(tblName)
     On Error GoTo 0
 End Function

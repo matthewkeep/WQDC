@@ -7,7 +7,7 @@ Option Explicit
 Public Function GetSite() As String
     ' Returns currently selected site from Inputs sheet
     Dim ws As Worksheet
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetSite = Trim$(CStr(ws.Range(Schema.NAME_SITE).Value))
@@ -18,7 +18,7 @@ End Function
 Public Function GetEnhancedMode() As String
     ' Returns Enhanced Mode setting (On/Off)
     Dim ws As Worksheet
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetEnhancedMode = Trim$(CStr(ws.Range(Schema.NAME_ENHANCED_MODE).Value))
@@ -31,7 +31,7 @@ End Function
 Public Function LoadState() As State
     Dim s As State, ws As Worksheet, rng As Range, i As Long
     On Error Resume Next
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
     s.Vol = Val(GetVal(ws, Schema.NAME_INIT_VOL))
@@ -75,7 +75,7 @@ End Function
 Public Function GetTelemCalEnabled() As Boolean
     ' Returns True if telemetry calibration is enabled
     Dim ws As Worksheet
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not ws Is Nothing Then
         On Error Resume Next
         GetTelemCalEnabled = (UCase$(Trim$(ws.Range(Schema.NAME_TELEM_CAL).Value)) = "ON")
@@ -90,7 +90,7 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
     Dim cfg As Config, ws As Worksheet, rng As Range, i As Long
     Dim mixingModel As String, rainfallMode As String, telemCal As String
     On Error Resume Next
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Function
 
     ' Common config
@@ -156,9 +156,9 @@ Private Sub LoadInflowIR(ByVal ws As Worksheet, ByRef cfg As Config)
     If tbl.ListRows.Count = 0 Then Exit Sub
 
     chemNames = Schema.ChemistryNames()
-    flowCol = Schema.ColIdx(tbl, Schema.IR_COL_FLOW)
-    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    chemCol = Schema.ColIdx(tbl, chemNames(0))  ' First chemistry column (e.g., "EC (uS/cm)")
+    flowCol = Helpers.ColIdx(tbl, Schema.IR_COL_FLOW)
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    chemCol = Helpers.ColIdx(tbl, chemNames(0))  ' First chemistry column (e.g., "EC (uS/cm)")
     If flowCol = 0 Then Exit Sub
 
     On Error Resume Next
@@ -189,7 +189,7 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     Dim predState As State, targetName As String
     Dim sampleDate As Date, runDate As Date, dayOffset As Long
     On Error Resume Next
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
     ' Use state at trigger day for predictions (or final if no trigger)
@@ -299,7 +299,7 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
 
     ' Get live table for site
     On Error Resume Next
-    Set tbl = ws.ListObjects(Schema.LiveTableName(site))
+    Set tbl = ws.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
@@ -310,7 +310,7 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
 
     ' Read hidden layer values
     For i = 1 To Core.METRIC_COUNT
-        hidCol = Schema.ColIdx(tbl, Schema.EnhHidColName(i))
+        hidCol = Helpers.ColIdx(tbl, Helpers.EnhHidColName(i))
         If hidCol > 0 Then
             s.Hidden(i) = Val(tbl.DataBodyRange.Cells(rowIdx, hidCol).Value)
         End If
@@ -329,7 +329,7 @@ Public Sub LoadHiddenForDate(ByVal site As String, ByVal targetDate As Date)
     s = LoadHiddenFromLog(site, targetDate)
     If s.Hidden(1) < Core.EPS Then Exit Sub  ' No data found
 
-    Set ws = Schema.GetSheet(Schema.SHEET_INPUT)
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
 
     On Error Resume Next
@@ -352,7 +352,7 @@ Public Function HasLogDataForDate(ByVal site As String, ByVal targetDate As Date
     If ws Is Nothing Then Exit Function
 
     On Error Resume Next
-    Set tbl = ws.ListObjects(Schema.LiveTableName(site))
+    Set tbl = ws.ListObjects(Helpers.LiveTableName(site))
     On Error GoTo 0
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function

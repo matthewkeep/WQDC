@@ -50,7 +50,7 @@ Public Function GetLatestEC(ByVal beforeDate As Date, ByVal site As String) As V
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
-    ecCol = Schema.ColIdx(tbl, Schema.TelemECColName(site))
+    ecCol = Helpers.ColIdx(tbl, Helpers.TelemECColName(site))
     If ecCol = 0 Then Exit Function
 
     bestDate = 0: bestEC = Empty
@@ -78,7 +78,7 @@ Public Function GetLatestVol(ByVal beforeDate As Date, ByVal site As String) As 
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
 
-    volCol = Schema.ColIdx(tbl, Schema.TelemVolColName(site))
+    volCol = Helpers.ColIdx(tbl, Helpers.TelemVolColName(site))
     If volCol = 0 Then Exit Function
 
     bestDate = 0: bestVol = Empty

@@ -67,12 +67,16 @@ Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
         End If
     End If
 
+    ' Check On/Off toggle cells (Enhanced Mode, Telemetry Cal)
+    If ToggleOnOff(Target, ws, Schema.NAME_ENHANCED_MODE) Then Cancel = True: Exit Sub
+    If ToggleOnOff(Target, ws, Schema.NAME_TELEM_CAL) Then Cancel = True: Exit Sub
+
     ' Check IR table
-    Set tbl = Schema.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
+    Set tbl = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
     If Not tbl Is Nothing Then
-        actionCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTION)
+        actionCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTION)
         Dim activeCol As Long
-        activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+        activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
 
         ' Check Add Input header
         If actionCol > 0 Then
@@ -111,7 +115,7 @@ End Sub
 Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Handle double-clicks on History sheet (per-site tables)
     Dim ws As Worksheet, tbl As ListObject, lo As ListObject
-    Dim actionCol As Long, rowIdx As Long, runId As String, site As String
+    Dim actionCol As Long, loadCol As Long, rowIdx As Long, runId As String, site As String
 
     Set ws = Target.Worksheet
 
@@ -133,25 +137,41 @@ Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Extract site from table name (e.g., "tblHistory_RP1" -> "RP1")
     site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
 
-    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
-    If actionCol = 0 Then Exit Sub
+    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
+    rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
+    If rowIdx < 1 Or rowIdx > tbl.ListRows.Count Then Exit Sub
+    runId = tbl.DataBodyRange.Cells(rowIdx, 1).Value
 
-    ' Check if clicked in action column data area
-    If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
-        Cancel = True
-        rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
-        runId = tbl.DataBodyRange.Cells(rowIdx, 1).Value  ' RunId is column 1
-
-        ' Don't rollback the most recent (Current) row
-        If rowIdx = tbl.ListRows.Count Then
-            MsgBox "This is the current run.", vbInformation, "WQOC"
+    ' Check if clicked in Load column - restore settings only (no deletion, no run)
+    If loadCol > 0 Then
+        If Not Intersect(Target, tbl.DataBodyRange.Columns(loadCol)) Is Nothing Then
+            Cancel = True
+            If History.LoadSettings(runId, site) Then
+                MsgBox "Settings loaded from " & runId, vbInformation, "WQOC"
+            End If
             Exit Sub
         End If
+    End If
 
-        If MsgBox("Rollback to run " & runId & "?" & vbNewLine & _
-                  "This will remove all runs after this one.", vbYesNo + vbQuestion, "WQOC") = vbYes Then
-            History.RollbackTo runId, site
-            RefreshHistoryActions tbl
+    ' Check if clicked in Action column - rollback with auto-run
+    If actionCol > 0 Then
+        If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
+            Cancel = True
+
+            ' Don't rollback the most recent (Current) row
+            If rowIdx = tbl.ListRows.Count Then
+                MsgBox "This is the current run.", vbInformation, "WQOC"
+                Exit Sub
+            End If
+
+            If MsgBox("Rollback to run " & runId & "?" & vbNewLine & _
+                      "This will remove all runs after this one and re-run.", vbYesNo + vbQuestion, "WQOC") = vbYes Then
+                History.RollbackTo runId, site
+                RefreshHistoryActions tbl
+                History.LoadSettings runId, site
+                WQOC.Run
+            End If
         End If
     End If
 End Sub
@@ -162,9 +182,9 @@ Private Sub AddIRRow(ByVal tbl As ListObject)
     ' Add a new empty row to IR table with "Remove" action and Active=Yes
     Dim newRow As ListRow, activeCol As Long
     Set newRow = tbl.ListRows.Add
-    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
-    Schema.InitIRRowAction newRow.Range, tbl
+    Helpers.InitIRRowAction newRow.Range, tbl
 End Sub
 
 Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
@@ -172,7 +192,7 @@ Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
     Dim activeCol As Long, cell As Range, rowRng As Range
     Dim isActive As Boolean
 
-    activeCol = Schema.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol = 0 Then Exit Sub
 
     Set cell = tbl.DataBodyRange.Cells(rowIdx, activeCol)
@@ -196,7 +216,7 @@ Private Sub RemoveIRRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
     If tbl.ListRows.Count = 1 Then
         ' Don't delete last row, just clear it
         tbl.DataBodyRange.ClearContents
-        tbl.DataBodyRange.Cells(1, Schema.ColIdx(tbl, Schema.IR_COL_ACTION)).Value = Schema.ACTION_REMOVE
+        tbl.DataBodyRange.Cells(1, Helpers.ColIdx(tbl, Schema.IR_COL_ACTION)).Value = Schema.ACTION_REMOVE
     Else
         tbl.ListRows(rowIdx).Delete
     End If
@@ -206,7 +226,7 @@ Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
     ' Update action column text: "Current" for last row, "Rollback" for others
     Dim i As Long, actionCol As Long
     If tbl.DataBodyRange Is Nothing Then Exit Sub
-    actionCol = Schema.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     If actionCol = 0 Then Exit Sub
 
     For i = 1 To tbl.ListRows.Count
@@ -215,7 +235,22 @@ Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
         Else
             tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
         End If
-        Schema.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
+        Helpers.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
     Next i
 End Sub
+
+' ==== Toggle Helpers ===========================================================
+
+Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
+    ' Toggle On/Off for named range if clicked; returns True if handled
+    Dim rng As Range
+    On Error Resume Next
+    Set rng = ws.Range(nm)
+    On Error GoTo 0
+    If rng Is Nothing Then Exit Function
+    If Intersect(Target, rng) Is Nothing Then Exit Function
+
+    rng.Value = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
+    ToggleOnOff = True
+End Function
 

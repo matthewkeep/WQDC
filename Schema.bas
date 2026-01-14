@@ -1,6 +1,7 @@
 Option Explicit
-' Schema: Constants and configuration.
+' Schema: Constants only (sheet/table/column names, colors, defaults).
 ' Dependencies: None
+' Note: Utility functions moved to Helpers.bas
 
 ' ==== Sheet Names ============================================================
 Public Const SHEET_INPUT As String = "Inputs"
@@ -65,6 +66,7 @@ Public Const IR_COL_ACTION As String = "Add Input"
 
 ' History table columns
 Public Const HISTORY_COL_ACTION As String = "Action"
+Public Const HISTORY_COL_LOAD As String = "Load"
 
 ' Telemetry columns (Date and Rain are fixed; EC/Vol are per-site)
 Public Const TELEM_COL_DATE As String = "Date"
@@ -117,9 +119,7 @@ Public Const RAINFALL_HINDCAST As String = "Hindcast"
 Public Const RAINFALL_FULL As String = "Hindcast+Forecast"
 Public Const RAINFALL_MODE_LIST As String = "Off,Hindcast,Hindcast+Forecast"
 
-Public Const TELEM_CAL_OFF As String = "Off"
 Public Const TELEM_CAL_ON As String = "On"
-Public Const TELEM_CAL_LIST As String = "Off,On"
 
 ' ==== Chart Layout ===========================================================
 Public Const CHART_LEFT_POS As Double = 20
@@ -151,86 +151,3 @@ Public Function ChemistryCount() As Long
     ChemistryCount = UBound(mChemistryNames) - LBound(mChemistryNames) + 1
 End Function
 
-' ==== Helper Functions =======================================================
-
-Public Function ColIdx(ByVal tbl As ListObject, ByVal colName As String) As Long
-    ' Returns column index (1-based) or 0 if not found
-    Dim col As ListColumn
-    On Error Resume Next
-    Set col = tbl.ListColumns(colName)
-    If Not col Is Nothing Then ColIdx = col.Index
-    On Error GoTo 0
-End Function
-
-Public Function LiveTableName(ByVal site As String) As String
-    ' Returns table name for site's live log table (e.g., "tblLive_RP1")
-    LiveTableName = LIVE_TABLE_PREFIX & site
-End Function
-
-Public Function EnhHidColName(ByVal idx As Long) As String
-    ' Returns hidden layer column name (e.g., "EnhHid1", "EnhHid2", ...)
-    EnhHidColName = "EnhHid" & idx
-End Function
-
-Public Function HistoryTableName(ByVal site As String) As String
-    ' Returns table name for site's history table (e.g., "tblHistory_RP1")
-    HistoryTableName = HISTORY_TABLE_PREFIX & site
-End Function
-
-Public Function TelemECColName(ByVal site As String) As String
-    ' Returns telemetry EC column name for site, e.g., "EC (RP1)"
-    TelemECColName = "EC (" & site & ")"
-End Function
-
-Public Function TelemVolColName(ByVal site As String) As String
-    ' Returns telemetry Volume column name for site, e.g., "Vol (RP1)"
-    TelemVolColName = "Vol (" & site & ")"
-End Function
-
-Public Function SeasonLogTableName(ByVal site As String) As String
-    ' Returns table name for site's season backtest table (e.g., "tblSeasonLog_RP1")
-    SeasonLogTableName = "tblSeasonLog_" & site
-End Function
-
-' ==== Shared Worksheet/Table Helpers ========================================
-
-Public Function GetSheet(ByVal nm As String) As Worksheet
-    ' Returns worksheet by name, or Nothing if not found
-    On Error Resume Next
-    Set GetSheet = ThisWorkbook.Worksheets(nm)
-    On Error GoTo 0
-End Function
-
-Public Function GetTable(ByVal sheetName As String, ByVal tableName As String) As ListObject
-    ' Returns ListObject by sheet and table name, or Nothing if not found
-    Dim ws As Worksheet
-    Set ws = GetSheet(sheetName)
-    If Not ws Is Nothing Then
-        On Error Resume Next
-        Set GetTable = ws.ListObjects(tableName)
-        On Error GoTo 0
-    End If
-End Function
-
-Public Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
-    ' Case-insensitive site comparison
-    MatchesSite = (UCase$(Trim$(CStr(v))) = UCase$(Trim$(site)))
-End Function
-
-Public Sub StyleActionCell(ByVal cell As Range)
-    ' Applies blue hyperlink style to action cells
-    With cell
-        .Font.Color = COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-    End With
-End Sub
-
-Public Sub InitIRRowAction(ByVal rowRng As Range, ByVal tbl As ListObject)
-    ' Sets action cell value and styling only - no other formatting
-    Dim actionCol As Long
-    actionCol = ColIdx(tbl, IR_COL_ACTION)
-    If actionCol > 0 Then
-        rowRng.Cells(1, actionCol).Value = ACTION_REMOVE
-        StyleActionCell rowRng.Cells(1, actionCol)
-    End If
-End Sub

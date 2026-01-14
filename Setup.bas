@@ -138,8 +138,8 @@ Private Function EnsureSiteTelemColumns(ByVal site As String) As Boolean
     On Error GoTo 0
     If tbl Is Nothing Then Exit Function
 
-    ecCol = Schema.TelemECColName(site)
-    volCol = Schema.TelemVolColName(site)
+    ecCol = Helpers.TelemECColName(site)
+    volCol = Helpers.TelemVolColName(site)
 
     ' Add EC column if missing
     On Error Resume Next
@@ -273,14 +273,16 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("N14"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O14")
 
     ' Column N-O: Hidden Mass section
-    SetIfEmpty ws.Range("N16"), "Hidden Mass"
-    For i = 0 To n - 1: SetIfEmpty ws.Cells(17 + i, 14), chem(i): Next i
-    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O17").Resize(n, 1)
+    SetIfEmpty ws.Range("N15"), "Hidden Mass"
+    For i = 0 To n - 1: SetIfEmpty ws.Cells(16 + i, 14), chem(i): Next i
+    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O16").Resize(n, 1)
 
     ' Conditional formatting (grey-out) - always reapply
-    ApplyEnhancedConditionalFormat ws.Range("N9:O23"), ws.Range("O8")
+    ' Clear all first, then add in priority order (lowest first, Enhanced last = highest priority)
+    ws.Range("N9:O22").FormatConditions.Delete
     ApplyRainFactorConditionalFormat ws.Range("N11:O11"), ws.Range("O10")
-    ApplyMixingConditionalFormat ws.Range("N13:O14"), ws.Range("O12")
+    ApplyMixingConditionalFormat ws.Range("N13:O22"), ws.Range("O12")
+    ApplyEnhancedConditionalFormat ws.Range("N9:O22"), ws.Range("O8")
 End Sub
 
 Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As Long)
@@ -474,8 +476,8 @@ Private Sub SeedSiteTelemetry(ByVal site As String)
 
     ' Get column indices for this site
     On Error Resume Next
-    ecCol = tbl.ListColumns(Schema.TelemECColName(site)).Index
-    volCol = tbl.ListColumns(Schema.TelemVolColName(site)).Index
+    ecCol = tbl.ListColumns(Helpers.TelemECColName(site)).Index
+    volCol = tbl.ListColumns(Helpers.TelemVolColName(site)).Index
     On Error GoTo 0
     If ecCol = 0 Or volCol = 0 Then Exit Sub
 
@@ -719,8 +721,8 @@ Public Sub SeedSiteTelemFull(ByVal site As String)
     If tbl.DataBodyRange Is Nothing Then Exit Sub
 
     On Error Resume Next
-    ecCol = tbl.ListColumns(Schema.TelemECColName(site)).Index
-    volCol = tbl.ListColumns(Schema.TelemVolColName(site)).Index
+    ecCol = tbl.ListColumns(Helpers.TelemECColName(site)).Index
+    volCol = tbl.ListColumns(Helpers.TelemVolColName(site)).Index
     On Error GoTo 0
     If ecCol = 0 Or volCol = 0 Then Exit Sub
 
@@ -778,7 +780,7 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     Dim startCol As Long
 
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
-    tblName = Schema.HistoryTableName(site)
+    tblName = Helpers.HistoryTableName(site)
 
     ' Check if table already exists
     On Error Resume Next
@@ -794,16 +796,17 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     ws.Cells(1, startCol).Font.Bold = True
 
     ' Create table (no Site column - site is in table name)
-    ' Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action
+    ' Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
     MakeTbl ws, ws.Cells(3, startCol), tblName, _
         Array("RunId", "Timestamp", "RunDate", "Days", "Mode", _
               "RainfallMode", "TelemCal", "Tau", "SurfaceFrac", "RainFactor", _
-              "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION)
+              "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
 
-    ' Style action column header and format date columns
+    ' Style action column headers and format date columns
     Set tbl = ws.ListObjects(tblName)
     If Not tbl Is Nothing Then
         StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
+        StyleActionHeader tbl, Schema.HISTORY_COL_LOAD, ""
         tbl.ListColumns(2).DataBodyRange.NumberFormat = "d/mm/yy hh:mm"  ' Timestamp
         tbl.ListColumns(3).DataBodyRange.NumberFormat = "d/mm/yy"         ' RunDate
     End If
@@ -823,7 +826,7 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     Dim startCol As Long
 
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    tblName = Schema.LiveTableName(site)
+    tblName = Helpers.LiveTableName(site)
 
     ' Check if table already exists
     On Error Resume Next
@@ -842,7 +845,7 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     h(4) = Schema.LIVE_COL_ENH_VOL
     h(5) = Schema.LIVE_COL_ENH_EC
     For i = 1 To 7
-        h(5 + i) = Schema.EnhHidColName(i)  ' EnhHid1 through EnhHid7
+        h(5 + i) = Helpers.EnhHidColName(i)  ' EnhHid1 through EnhHid7
     Next i
     h(13) = Schema.LIVE_COL_ERR_VOL
     h(14) = Schema.LIVE_COL_ERR_EC
@@ -869,7 +872,7 @@ Public Sub EnsureSeasonLogTable(ByVal site As String)
     Dim startCol As Long
 
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    tblName = Schema.SeasonLogTableName(site)
+    tblName = Helpers.SeasonLogTableName(site)
 
     ' Check if table already exists
     On Error Resume Next
@@ -941,12 +944,6 @@ Private Sub SetupControls()
     End With
     AddNm Schema.NAME_RUN_CELL, runCell
 
-    ' Enhanced mode dropdown validation
-    With ws.Range(Schema.NAME_ENHANCED_MODE).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:="On,Off"
-    End With
-
     ' Site dropdown validation (from tblCatalog RR column)
     With ws.Range(Schema.NAME_SITE).Validation
         .Delete
@@ -965,11 +962,6 @@ Private Sub SetupControls()
         .Add Type:=xlValidateList, Formula1:=Schema.RAINFALL_MODE_LIST
     End With
 
-    ' Telemetry calibration dropdown validation
-    With ws.Range(Schema.NAME_TELEM_CAL).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:=Schema.TELEM_CAL_LIST
-    End With
 End Sub
 
 ' ==== Helpers ================================================================
@@ -977,7 +969,6 @@ End Sub
 Private Sub ApplyEnhancedConditionalFormat(ByVal targetRange As Range, ByVal toggleCell As Range)
     ' Greys out target range when Enhanced Mode is Off
     Dim fc As FormatCondition
-    targetRange.FormatConditions.Delete
     Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
         Formula1:="=" & toggleCell.Address(True, True) & "<>""On""")
     With fc
@@ -989,7 +980,6 @@ End Sub
 Private Sub ApplyRainFactorConditionalFormat(ByVal targetRange As Range, ByVal rainfallCell As Range)
     ' Greys out Rain Factor when Rainfall is Off
     Dim fc As FormatCondition
-    targetRange.FormatConditions.Delete
     Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
         Formula1:="=" & rainfallCell.Address(True, True) & "=""Off""")
     With fc
@@ -999,9 +989,8 @@ Private Sub ApplyRainFactorConditionalFormat(ByVal targetRange As Range, ByVal r
 End Sub
 
 Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal modelCell As Range)
-    ' Greys out Tau/Surface Fraction when Mixing Model is Simple
+    ' Greys out Tau/Surface Fraction/Hidden Mass when Mixing Model is Simple
     Dim fc As FormatCondition
-    targetRange.FormatConditions.Delete
     Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
         Formula1:="=" & modelCell.Address(True, True) & "<>""TwoBucket""")
     With fc
