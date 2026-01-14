@@ -57,14 +57,25 @@ End Function
 Public Function SnapState(ByRef s As State, ByVal site As String) As State
     ' Calibrates state by snapping to latest telemetry readings
     ' Replaces Vol and EC with observed values if available
+    ' Also equilibrates hidden layer to same concentration (for TwoBucket accuracy)
     Dim snapped As State, latestVol As Variant, latestEC As Variant
+    Dim impliedHidVol As Double
     snapped = Core.CopyState(s)
 
     latestVol = Telemetry.GetLatestVol(Date, site)
     latestEC = Telemetry.GetLatestEC(Date, site)
 
     If Not IsEmpty(latestVol) Then snapped.Vol = CDbl(latestVol)
-    If Not IsEmpty(latestEC) Then snapped.Chem(1) = CDbl(latestEC)
+
+    If Not IsEmpty(latestEC) Then
+        snapped.Chem(1) = CDbl(latestEC)
+        ' Equilibrate hidden layer: assume same concentration as visible
+        ' Infer hidden volume from old state, apply new concentration
+        If s.Chem(1) > Core.EPS Then
+            impliedHidVol = s.Hidden(1) / s.Chem(1)
+            snapped.Hidden(1) = impliedHidVol * CDbl(latestEC)
+        End If
+    End If
 
     SnapState = snapped
 End Function
