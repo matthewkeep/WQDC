@@ -61,11 +61,7 @@ Public Sub Run()
     End If
 
     ' Generate charts for site
-    If enhancedMode Then
-        GenerateCharts site, cfgStd, rStd, rEnh
-    Else
-        GenerateCharts site, cfgStd, rStd
-    End If
+    GenerateCharts site, cfgStd, rStd, rEnh, enhancedMode
 
     Application.Calculation = cm
     Application.ScreenUpdating = True
@@ -165,7 +161,7 @@ End Sub
 
 ' ==== Chart Generation =======================================================
 
-Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd As Result, Optional ByRef rEnh As Result)
+Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd As Result, ByRef rEnh As Result, ByVal hasEnhanced As Boolean)
     ' Draws charts from simulation results - Standard solid, Enhanced dashed
     Dim wsChart As Worksheet
     Dim cht As ChartObject
@@ -173,15 +169,11 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByRef rStd
     Dim dates() As Date, volStd() As Double, volEnh() As Double
     Dim ecStd() As Double, ecEnh() As Double
     Dim trigArr() As Double
-    Dim hasEnhanced As Boolean
 
     On Error Resume Next
     Set wsChart = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
     On Error GoTo 0
     If wsChart Is Nothing Then Exit Sub
-
-    ' Check if we have Enhanced result
-    hasEnhanced = (UBound(rEnh.Snaps) >= 0)
 
     ' Build arrays from Standard result
     n = UBound(rStd.Snaps) + 1
