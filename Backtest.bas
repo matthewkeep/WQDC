@@ -279,8 +279,8 @@ End Function
 
 Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As Date, ByVal runType As String) As Config
     ' Loads config with IR chemistry from before the given date
-    Dim cfg As Config, tblCat As ListObject, tblRes As ListObject
-    Dim catRow As ListRow, irSite As String, flow As Double
+    Dim cfg As Config, tblIdx As ListObject, tblRes As ListObject
+    Dim idxRow As ListRow, irSite As String, flow As Double
     Dim labData As Variant, chem As Variant, i As Long
     Dim mixingModel As String, rainfallMode As String
 
@@ -320,19 +320,19 @@ Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As
     End If
 
     ' Load IR flows and chemistry
-    Set tblCat = GetCatalogTable()
+    Set tblIdx = GetIndexTable()
     Set tblRes = GetResultsTable()
-    If tblCat Is Nothing Or tblRes Is Nothing Then
+    If tblIdx Is Nothing Or tblRes Is Nothing Then
         LoadConfigForBacktest = cfg
         Exit Function
     End If
 
     chem = Schema.ChemistryNames()
 
-    For Each catRow In tblCat.ListRows
-        If Helpers.MatchesSite(catRow.Range.Cells(1, 1).Value, site) Then
-            irSite = Trim$(catRow.Range.Cells(1, 2).Value)
-            flow = Val(catRow.Range.Cells(1, 3).Value)
+    For Each idxRow In tblIdx.ListRows
+        If Helpers.MatchesSite(idxRow.Range.Cells(1, 1).Value, site) Then
+            irSite = Trim$(idxRow.Range.Cells(1, 2).Value)
+            flow = Val(idxRow.Range.Cells(1, 3).Value)
 
             labData = GetLabDataBeforeDate(irSite, beforeDate, tblRes, chem)
 
@@ -343,7 +343,7 @@ Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As
                 Next i
             End If
         End If
-    Next catRow
+    Next idxRow
 
     If cfg.Inflow > Core.EPS Then
         For i = 1 To Core.METRIC_COUNT
@@ -429,11 +429,11 @@ Private Function GetResultsTable() As ListObject
     On Error GoTo 0
 End Function
 
-Private Function GetCatalogTable() As ListObject
+Private Function GetIndexTable() As ListObject
     Dim ws As Worksheet
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
-    If Not ws Is Nothing Then Set GetCatalogTable = ws.ListObjects(Schema.TABLE_CATALOG)
+    If Not ws Is Nothing Then Set GetIndexTable = ws.ListObjects(Schema.TABLE_INDEX)
     On Error GoTo 0
 End Function
 

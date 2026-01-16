@@ -2,11 +2,14 @@ Option Explicit
 ' Core: Type definitions (C sorts before D/M/S).
 ' Dependencies: None
 
+' ==== Constants ===============================================================
+
 Public Const METRIC_COUNT As Long = 7
 Public Const NO_TRIGGER As Long = -1
 Public Const EPS As Double = 0.000001
 
-' Chemistry metric indices (1-based to match array bounds)
+' ==== Enums ===================================================================
+
 Public Enum Metric
     mEC = 1
     mF_U = 2
@@ -17,10 +20,13 @@ Public Enum Metric
     mTAN = 7
 End Enum
 
+' ==== Types ===================================================================
+
 Public Type State
     Vol As Double
     Chem(1 To 7) As Double
     Hidden(1 To 7) As Double
+    HidVol As Double
 End Type
 
 Public Type Config
@@ -47,6 +53,8 @@ Public Type Result
     FinalState As State
 End Type
 
+' ==== Public ==================================================================
+
 Private mNames As Variant
 
 Public Function MetricName(ByVal idx As Long) As String
@@ -61,9 +69,14 @@ End Function
 
 Public Function CopyState(ByRef s As State) As State
     Dim c As State, i As Long
-    c.Vol = s.Vol
+    c.Vol = s.Vol: c.HidVol = s.HidVol
     For i = 1 To METRIC_COUNT: c.Chem(i) = s.Chem(i): c.Hidden(i) = s.Hidden(i): Next i
     CopyState = c
+End Function
+
+Public Function IsHiddenEmpty(ByRef s As State) As Boolean
+    ' Returns True if hidden layer has no meaningful data
+    IsHiddenEmpty = (s.Hidden(mEC) < EPS)
 End Function
 
 Public Function InitHiddenAtEquilibrium(ByRef s As State) As State
@@ -75,13 +88,4 @@ Public Function InitHiddenAtEquilibrium(ByRef s As State) As State
         init.Hidden(i) = s.Vol * s.Chem(i)
     Next i
     InitHiddenAtEquilibrium = init
-End Function
-
-Public Function IsHiddenEmpty(ByRef s As State) As Boolean
-    ' Returns True if hidden layer has no values (all indices near zero)
-    Dim i As Long
-    For i = 1 To METRIC_COUNT
-        If s.Hidden(i) > EPS Then Exit Function
-    Next i
-    IsHiddenEmpty = True
 End Function

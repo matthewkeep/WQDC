@@ -1,6 +1,6 @@
 Option Explicit
 ' Events: Worksheet event handlers.
-' Dependencies: Loader, Schema, WQOC, History, EventBus
+' Dependencies: Loader, Schema, WQOC, History, Data
 '
 ' NOTE: To enable events, add this code to each sheet module
 ' (right-click sheet tab > View Code):
@@ -13,7 +13,7 @@ Option Explicit
 '       Events.OnInputsDoubleClick Target, Cancel
 '   End Sub
 '
-' === RunHistory sheet ===
+' === Record sheet ===
 '   Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
 '       Events.OnHistoryDoubleClick Target, Cancel
 '   End Sub
@@ -22,30 +22,43 @@ Option Explicit
 
 Public Sub OnInputsChange(ByVal Target As Range)
     ' Called from Inputs sheet Worksheet_Change event
-    ' Delegates to EventBus for decoupled handling
-    Dim siteRng As Range, sampleDateRng As Range
+    Dim v As String
+
+    ' Guard: skip if multi-cell change or error value
+    If Target.Cells.Count > 1 Then Exit Sub
     On Error Resume Next
-    Set siteRng = Target.Worksheet.Range(Schema.NAME_SITE)
-    Set sampleDateRng = Target.Worksheet.Range(Schema.NAME_SAMPLE_DATE)
+    v = Trim$(CStr(Target.Value))
     On Error GoTo 0
 
     ' Site change
-    If Not siteRng Is Nothing Then
-        If Not Intersect(Target, siteRng) Is Nothing Then
-            Loader.LoadSiteData CStr(Target.Value)
-            EventBus.Notify EventBus.EVENT_SITE_CHANGED, CStr(Target.Value)
-            Exit Sub
-        End If
+    If MatchesRange(Target, Schema.NAME_SITE) And Len(v) > 0 Then
+        Loader.LoadSiteData v
+        Exit Sub
     End If
 
-    ' Sample date change
-    If Not sampleDateRng Is Nothing Then
-        If Not Intersect(Target, sampleDateRng) Is Nothing Then
-            EventBus.Notify EventBus.EVENT_SAMPLE_DATE_CHANGED
-            Exit Sub
-        End If
+    ' Sample date change - load hidden mass for TwoBucket continuity
+    If MatchesRange(Target, Schema.NAME_SAMPLE_DATE) Then
+        Dim site As String, sampleDate As Date
+        site = Data.GetSite()
+        sampleDate = Helpers.GetDateVal(Target.Worksheet, Schema.NAME_SAMPLE_DATE)
+        If Len(site) > 0 And sampleDate > 0 Then Data.LoadHiddenForDate site, sampleDate
+        Exit Sub
+    End If
+
+    ' Trigger preset change
+    If MatchesRange(Target, Schema.NAME_TRIGGER_PRESET) And Len(v) > 0 Then
+        Loader.LoadTriggerPreset v
+        Exit Sub
     End If
 End Sub
+
+Private Function MatchesRange(ByVal Target As Range, ByVal nm As String) As Boolean
+    Dim rng As Range
+    On Error Resume Next
+    Set rng = Target.Worksheet.Range(nm)
+    On Error GoTo 0
+    If Not rng Is Nothing Then MatchesRange = Not Intersect(Target, rng) Is Nothing
+End Function
 
 ' ==== Double-Click Events ======================================================
 
@@ -131,7 +144,7 @@ End Sub
 Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Handle double-clicks on History sheet (per-site tables)
     Dim ws As Worksheet, tbl As ListObject, lo As ListObject
-    Dim actionCol As Long, loadCol As Long, rowIdx As Long, runId As String, site As String
+    Dim idCol As Long, actionCol As Long, loadCol As Long, rowIdx As Long, runId As String, site As String
 
     Set ws = Target.Worksheet
 
@@ -153,11 +166,13 @@ Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
     ' Extract site from table name (e.g., "tblHistory_RP1" -> "RP1")
     site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
 
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
     actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
+    If idCol = 0 Or actionCol = 0 Then Exit Sub
     rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
     If rowIdx < 1 Or rowIdx > tbl.ListRows.Count Then Exit Sub
-    runId = tbl.DataBodyRange.Cells(rowIdx, 1).Value
+    runId = tbl.DataBodyRange.Cells(rowIdx, idCol).Value
 
     ' Check if clicked in Load column - restore settings only (no deletion, no run)
     If loadCol > 0 Then
@@ -186,7 +201,7 @@ Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
                 History.RollbackTo runId, site
                 RefreshHistoryActions tbl
                 History.LoadSettings runId, site
-                WQOC.Run
+                WQOC.Replay
             End If
         End If
     End If
@@ -198,12 +213,12 @@ Private Sub AddIRRow(ByVal tbl As ListObject)
     ' Add a new empty row to IR table with "Remove" action and Active=Yes
     Dim newRow As ListRow, activeCol As Long
     Dim isFirstRow As Boolean
+
     isFirstRow = (tbl.DataBodyRange Is Nothing)
     Set newRow = tbl.ListRows.Add
     activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
     Helpers.InitIRRowAction newRow.Range, tbl
-    ' Apply conditional formatting on first row (Excel auto-extends to subsequent rows)
     If isFirstRow Then Setup.ApplyIRActiveConditionalFormat tbl
 End Sub
 
@@ -223,13 +238,7 @@ Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
 End Sub
 
 Private Sub RemoveIRRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
-    ' Remove a row from IR table
-    If tbl.ListRows.Count = 1 Then
-        ' Don't delete last row, just clear it entirely
-        tbl.ListRows(1).Range.ClearContents
-    Else
-        tbl.ListRows(rowIdx).Delete
-    End If
+    tbl.ListRows(rowIdx).Delete
 End Sub
 
 Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
@@ -245,7 +254,6 @@ Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
         Else
             tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
         End If
-        Helpers.StyleActionCell tbl.DataBodyRange.Cells(i, actionCol)
     Next i
 End Sub
 
@@ -262,18 +270,12 @@ Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal
 
     newValue = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
     rng.Value = newValue
-
-    ' Fire event for Enhanced mode changes
-    If nm = Schema.NAME_ENHANCED_MODE Then
-        EventBus.Notify EventBus.EVENT_ENHANCED_MODE_CHANGED, newValue
-    End If
-
     ToggleOnOff = True
 End Function
 
 Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
     ' Toggle Standard/Enhanced for named range if clicked; returns True if handled
-    Dim rng As Range, current As String
+    Dim rng As Range, current As String, newMode As String
     On Error Resume Next
     Set rng = ws.Range(nm)
     On Error GoTo 0
@@ -281,7 +283,9 @@ Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVa
     If Intersect(Target, rng) Is Nothing Then Exit Function
 
     current = UCase$(Trim$(rng.Value))
-    rng.Value = IIf(current = "STANDARD", "Enhanced", "Standard")
+    newMode = IIf(current = "STANDARD", "Enhanced", "Standard")
+    rng.Value = newMode
+    Data.RefreshPredictedRow newMode
     ToggleStdEnh = True
 End Function
 

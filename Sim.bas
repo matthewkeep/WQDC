@@ -2,6 +2,8 @@ Option Explicit
 ' Sim: Core simulation loop.
 ' Dependencies: Core, Modes, Telemetry, Schema
 
+' ==== Public ==================================================================
+
 Public Function Run(ByRef init As State, ByRef cfg As Config) As Result
     Dim r As Result, s As State, d As Long
     Dim currentDate As Date, dayRain As Double
@@ -38,6 +40,8 @@ Fail:
     r.TriggerDay = Core.NO_TRIGGER
     Run = r
 End Function
+
+' ==== Private Implementation ==================================================
 
 Private Function GetRainForDay(ByVal d As Date, ByRef cfg As Config) As Double
     ' Returns rainfall volume (ML) for a given day based on mode

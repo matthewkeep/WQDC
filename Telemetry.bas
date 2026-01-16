@@ -41,56 +41,39 @@ End Function
 
 Public Function GetLatestEC(ByVal beforeDate As Date, ByVal site As String) As Variant
     ' Returns most recent EC value on or before the given date for site
-    ' Returns Empty if no data found
-    Dim tbl As ListObject, i As Long, d As Date, ec As Variant
-    Dim bestDate As Date, bestEC As Variant
-    Dim ecCol As Long
-
-    Set tbl = GetTelemTable()
-    If Not Helpers.HasData(tbl) Then Exit Function
-
-    ecCol = Helpers.ColIdx(tbl, Helpers.TelemECColName(site))
-    If ecCol = 0 Then Exit Function
-
-    bestDate = 0: bestEC = Empty
-    For i = 1 To tbl.ListRows.Count
-        d = tbl.DataBodyRange.Cells(i, 1).Value
-        If d <= beforeDate And d > bestDate Then
-            ec = tbl.DataBodyRange.Cells(i, ecCol).Value
-            If Not IsEmpty(ec) Then
-                bestDate = d
-                bestEC = ec
-            End If
-        End If
-    Next i
-    GetLatestEC = bestEC
+    GetLatestEC = GetLatestTelemValue(beforeDate, Helpers.TelemECColName(site))
 End Function
 
 Public Function GetLatestVol(ByVal beforeDate As Date, ByVal site As String) As Variant
     ' Returns most recent Volume value on or before the given date for site
+    GetLatestVol = GetLatestTelemValue(beforeDate, Helpers.TelemVolColName(site))
+End Function
+
+Private Function GetLatestTelemValue(ByVal beforeDate As Date, ByVal colName As String) As Variant
+    ' Returns most recent value on or before the given date for specified column
     ' Returns Empty if no data found
-    Dim tbl As ListObject, i As Long, d As Date, v As Variant
-    Dim bestDate As Date, bestVol As Variant
-    Dim volCol As Long
+    ' Uses MATCH for O(1) lookup + backward scan for first non-empty
+    Dim tbl As ListObject, i As Long
+    Dim col As Long, rowIdx As Variant, v As Variant
 
     Set tbl = GetTelemTable()
     If Not Helpers.HasData(tbl) Then Exit Function
 
-    volCol = Helpers.ColIdx(tbl, Helpers.TelemVolColName(site))
-    If volCol = 0 Then Exit Function
+    col = Helpers.ColIdx(tbl, colName)
+    If col = 0 Then Exit Function
 
-    bestDate = 0: bestVol = Empty
-    For i = 1 To tbl.ListRows.Count
-        d = tbl.DataBodyRange.Cells(i, 1).Value
-        If d <= beforeDate And d > bestDate Then
-            v = tbl.DataBodyRange.Cells(i, volCol).Value
-            If Not IsEmpty(v) Then
-                bestDate = d
-                bestVol = v
-            End If
+    ' Use MATCH to find starting position (largest date <= beforeDate)
+    rowIdx = Application.Match(CDbl(beforeDate), tbl.ListColumns(1).DataBodyRange, 1)
+    If IsError(rowIdx) Then Exit Function
+
+    ' Scan backwards from startIdx to find first non-empty value
+    For i = CLng(rowIdx) To 1 Step -1
+        v = tbl.DataBodyRange.Cells(i, col).Value
+        If Not IsEmpty(v) Then
+            GetLatestTelemValue = v
+            Exit Function
         End If
     Next i
-    GetLatestVol = bestVol
 End Function
 
 ' ==== Aggregates =============================================================

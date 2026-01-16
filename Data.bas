@@ -197,10 +197,12 @@ End Sub
 
 Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
     ' Saves result to appropriate output cell based on runType
-    ' Days output is relative to Run Date (today), not Sample Date
+    ' Days read directly from tblLive (single source of truth)
     Dim ws As Worksheet, rng As Range, i As Long
     Dim predState As State, targetName As String
-    Dim sampleDate As Date, runDate As Date, dayOffset As Long
+    Dim site As String, tbl As ListObject
+    Dim sampleDate As Date, targetDate As Date
+    Dim rowIdx As Long, daysCol As Long, days As Long
     On Error Resume Next
     Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
     If ws Is Nothing Then Exit Sub
@@ -212,16 +214,26 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
         predState = r.FinalState
     End If
 
-    ' Calculate days from Run Date (today), not Sample Date
+    ' Read Days from tblLive (already calculated correctly during WriteLog)
+    site = GetSite()
+    Set tbl = Helpers.GetTable(Schema.SHEET_LOG, Helpers.LiveTableName(site))
     sampleDate = Helpers.GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
-    runDate = Helpers.GetDateVal(ws, Schema.NAME_RUN_DATE)
-    dayOffset = CLng(runDate - sampleDate)
 
-    Dim days As Long
     If r.TriggerDay = Core.NO_TRIGGER Then
-        days = UBound(r.Snaps) - dayOffset
+        targetDate = sampleDate + UBound(r.Snaps)
     Else
-        days = r.TriggerDay - dayOffset
+        targetDate = sampleDate + r.TriggerDay
+    End If
+
+    days = 0
+    If Not tbl Is Nothing Then
+        If Helpers.HasData(tbl) Then
+            daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
+            rowIdx = Helpers.FindRowByDate(tbl, targetDate)
+            If rowIdx > 0 And daysCol > 0 Then
+                days = CLng(tbl.DataBodyRange.Cells(rowIdx, daysCol).Value)
+            End If
+        End If
     End If
 
     ' Write to appropriate trigger output cell
@@ -322,7 +334,7 @@ Public Function LoadHiddenFromLog(ByVal site As String, ByVal targetDate As Date
     If Not Helpers.HasData(tbl) Then Exit Function
 
     ' Find row for target date
-    rowIdx = FindLogRowByDate(tbl, targetDate)
+    rowIdx = Helpers.FindRowByDate(tbl, targetDate)
     If rowIdx = 0 Then Exit Function
 
     ' Read hidden layer values
@@ -357,25 +369,58 @@ Public Sub LoadHiddenForDate(ByVal site As String, ByVal targetDate As Date)
     Next i
 End Sub
 
-Public Function HasLogDataForDate(ByVal site As String, ByVal targetDate As Date) As Boolean
-    ' Returns True if tblLive has data for the specified date
-    Dim tbl As ListObject, ws As Worksheet
+Public Sub RefreshPredictedRow(ByVal mode As String)
+    ' Reloads Pred_Row (B5:I5) from tblLive based on Std/Enh mode
+    Dim ws As Worksheet, tbl As ListObject, rng As Range
+    Dim site As String, runDate As Date, triggerDays As Long, triggerDate As Date
+    Dim rowIdx As Long, col As Long, i As Long
+    Dim isEnhanced As Boolean, triggerMetric As String
 
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Function
+    Set ws = Helpers.GetSheet(Schema.SHEET_INPUT)
+    If ws Is Nothing Then Exit Sub
 
+    site = GetSite()
+    runDate = Helpers.GetDateVal(ws, Schema.NAME_RUN_DATE)
+    If Len(site) = 0 Or runDate = 0 Then Exit Sub
+
+    isEnhanced = (UCase$(mode) = "ENHANCED")
+
+    ' Get trigger days and calculate trigger date
     On Error Resume Next
-    Set tbl = ws.ListObjects(Helpers.LiveTableName(site))
+    triggerDays = CLng(ws.Range(IIf(isEnhanced, Schema.NAME_ENH_TRIGGER, Schema.NAME_STD_TRIGGER)).Value)
     On Error GoTo 0
+    triggerDate = runDate + triggerDays
+
+    ' Get tblLive row for trigger date
+    Set tbl = Helpers.GetTable(Schema.SHEET_LOG, Helpers.LiveTableName(site))
+    If Not Helpers.HasData(tbl) Then Exit Sub
+    rowIdx = Helpers.FindRowByDate(tbl, triggerDate)
+    If rowIdx = 0 Then Exit Sub
+
+    ' Write volume
+    col = Helpers.ColIdx(tbl, IIf(isEnhanced, Schema.LIVE_COL_ENH_VOL, Schema.LIVE_COL_STD_VOL))
+    If col > 0 Then Helpers.WriteToRange ws, Schema.NAME_RESULT_VOL, tbl.DataBodyRange.Cells(rowIdx, col).Value
+
+    ' Write chemistry
+    Set rng = Helpers.GetRng(ws, Schema.NAME_PRED_ROW)
+    If Not rng Is Nothing Then
+        For i = 1 To Core.METRIC_COUNT
+            col = Helpers.ColIdx(tbl, IIf(isEnhanced, Schema.EnhChemColName(i), Schema.StdChemColName(i)))
+            If col > 0 And i <= rng.Columns.Count Then rng.Cells(1, i).Value = tbl.DataBodyRange.Cells(rowIdx, col).Value
+        Next i
+    End If
+
+    ' Get trigger metric from tblHistory and apply formatting
+    triggerMetric = GetTriggerMetricFromHistory(site, isEnhanced)
+    FormatTriggeredCell ws, triggerMetric
+End Sub
+
+Private Function GetTriggerMetricFromHistory(ByVal site As String, ByVal isEnhanced As Boolean) As String
+    ' Reads trigger metric from most recent history entry
+    Dim tbl As ListObject, col As Long, colName As String
+    Set tbl = Helpers.GetTable(Schema.SHEET_RECORD, Helpers.HistoryTableName(site))
     If Not Helpers.HasData(tbl) Then Exit Function
-
-    HasLogDataForDate = (FindLogRowByDate(tbl, targetDate) > 0)
-End Function
-
-Private Function FindLogRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
-    ' Returns row index (1-based) for date in log table, or 0 if not found
-    ' Delegates to shared O(1) utility
-    FindLogRowByDate = Helpers.FindRowByDate(tbl, targetDate)
+    colName = IIf(isEnhanced, "EnhTriggerMetric", "StdTriggerMetric")
+    col = Helpers.ColIdx(tbl, colName)
+    If col > 0 Then GetTriggerMetricFromHistory = tbl.DataBodyRange.Cells(tbl.ListRows.Count, col).Value
 End Function

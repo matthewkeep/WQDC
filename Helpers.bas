@@ -95,24 +95,11 @@ Public Function FindRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date)
     If Not IsError(rowIdx) Then FindRowByDate = CLng(rowIdx)
 End Function
 
-' ==== Action Cell Styling =======================================================
-
-Public Sub StyleActionCell(ByVal cell As Range)
-    ' Applies blue hyperlink style to action cells
-    With cell
-        .Font.Color = Schema.COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-    End With
-End Sub
-
 Public Sub InitIRRowAction(ByVal rowRng As Range, ByVal tbl As ListObject)
-    ' Sets action cell value and styling only - no other formatting
+    ' Sets action cell value
     Dim actionCol As Long
     actionCol = ColIdx(tbl, Schema.IR_COL_ACTION)
-    If actionCol > 0 Then
-        rowRng.Cells(1, actionCol).Value = Schema.ACTION_REMOVE
-        StyleActionCell rowRng.Cells(1, actionCol)
-    End If
+    If actionCol > 0 Then rowRng.Cells(1, actionCol).Value = Schema.ACTION_REMOVE
 End Sub
 
 ' ==== Named Range Access ========================================================
@@ -151,3 +138,119 @@ Public Function GetDateVal(ByVal ws As Worksheet, ByVal nm As String) As Date
         GetDateVal = CDate(v)  ' Excel serial date number
     End If
 End Function
+
+' ==== Serialization Helpers ====================================================
+
+Public Function SerializeRange(ByVal rng As Range, ByVal count As Long) As String
+    ' Serializes horizontal range values to pipe-delimited string
+    Dim i As Long, parts() As String
+    If rng Is Nothing Then Exit Function
+    ReDim parts(0 To count - 1)
+    For i = 1 To count
+        parts(i - 1) = CStr(Val(rng.Cells(1, i).Value))
+    Next i
+    SerializeRange = Join(parts, "|")
+End Function
+
+Public Function SerializeColumn(ByVal rng As Range, ByVal count As Long) As String
+    ' Serializes vertical column range values to pipe-delimited string
+    Dim i As Long, parts() As String
+    If rng Is Nothing Then Exit Function
+    ReDim parts(0 To count - 1)
+    For i = 1 To count
+        parts(i - 1) = CStr(Val(rng.Cells(i, 1).Value))
+    Next i
+    SerializeColumn = Join(parts, "|")
+End Function
+
+Public Sub DeserializeToRange(ByVal str As String, ByVal rng As Range, ByVal count As Long)
+    ' Writes pipe-delimited values to horizontal range
+    Dim parts() As String, i As Long
+    If rng Is Nothing Or Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    For i = 1 To count
+        If i - 1 <= UBound(parts) Then rng.Cells(1, i).Value = Val(parts(i - 1))
+    Next i
+End Sub
+
+Public Sub DeserializeToColumn(ByVal str As String, ByVal rng As Range, ByVal count As Long)
+    ' Writes pipe-delimited values to vertical column range
+    Dim parts() As String, i As Long
+    If rng Is Nothing Or Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    For i = 1 To count
+        If i - 1 <= UBound(parts) Then rng.Cells(i, 1).Value = Val(parts(i - 1))
+    Next i
+End Sub
+
+Public Function SerializeIRTable(ByVal tbl As ListObject) As String
+    ' Serializes IR table to multi-line pipe-delimited string
+    ' Format: Source|Flow|Active|SampleDate|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+    Dim row As ListRow, lines() As String, lineIdx As Long
+    Dim srcCol As Long, flowCol As Long, activeCol As Long, dateCol As Long
+    Dim chemNames As Variant, i As Long, parts() As String
+
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+
+    srcCol = ColIdx(tbl, Schema.IR_COL_SOURCE)
+    flowCol = ColIdx(tbl, Schema.IR_COL_FLOW)
+    activeCol = ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    dateCol = ColIdx(tbl, Schema.IR_COL_SAMPLE_DATE)
+    chemNames = Schema.ChemistryNames()
+
+    ReDim lines(0 To tbl.ListRows.Count - 1)
+    lineIdx = 0
+
+    For Each row In tbl.ListRows
+        ReDim parts(0 To 3 + Core.METRIC_COUNT)
+        parts(0) = CStr(row.Range.Cells(1, srcCol).Value)
+        parts(1) = CStr(Val(row.Range.Cells(1, flowCol).Value))
+        parts(2) = CStr(row.Range.Cells(1, activeCol).Value)
+        parts(3) = Format$(row.Range.Cells(1, dateCol).Value, "yyyy-mm-dd")
+        For i = 1 To Core.METRIC_COUNT
+            parts(3 + i) = CStr(Val(row.Range.Cells(1, ColIdx(tbl, chemNames(i - 1))).Value))
+        Next i
+        lines(lineIdx) = Join(parts, "|")
+        lineIdx = lineIdx + 1
+    Next row
+
+    SerializeIRTable = Join(lines, vbLf)
+End Function
+
+Public Sub DeserializeIRTable(ByVal str As String, ByVal tbl As ListObject)
+    ' Restores IR table from multi-line pipe-delimited string
+    Dim lines() As String, parts() As String, i As Long, j As Long
+    Dim srcCol As Long, flowCol As Long, activeCol As Long, dateCol As Long
+    Dim chemNames As Variant, row As ListRow
+
+    If tbl Is Nothing Or Len(str) = 0 Then Exit Sub
+
+    ' Clear existing rows
+    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+
+    srcCol = ColIdx(tbl, Schema.IR_COL_SOURCE)
+    flowCol = ColIdx(tbl, Schema.IR_COL_FLOW)
+    activeCol = ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    dateCol = ColIdx(tbl, Schema.IR_COL_SAMPLE_DATE)
+    chemNames = Schema.ChemistryNames()
+
+    lines = Split(str, vbLf)
+
+    For i = 0 To UBound(lines)
+        If Len(Trim$(lines(i))) > 0 Then
+            parts = Split(lines(i), "|")
+            Set row = tbl.ListRows.Add
+            If srcCol > 0 Then row.Range.Cells(1, srcCol).Value = parts(0)
+            If flowCol > 0 And UBound(parts) >= 1 Then row.Range.Cells(1, flowCol).Value = Val(parts(1))
+            If activeCol > 0 And UBound(parts) >= 2 Then row.Range.Cells(1, activeCol).Value = parts(2)
+            If dateCol > 0 And UBound(parts) >= 3 Then row.Range.Cells(1, dateCol).Value = CDate(parts(3))
+            For j = 1 To Core.METRIC_COUNT
+                If UBound(parts) >= 3 + j Then
+                    row.Range.Cells(1, ColIdx(tbl, chemNames(j - 1))).Value = Val(parts(3 + j))
+                End If
+            Next j
+            InitIRRowAction row.Range, tbl
+        End If
+    Next i
+End Sub

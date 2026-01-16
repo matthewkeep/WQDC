@@ -26,16 +26,25 @@ End Sub
 
 Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
     ' Writes Standard predictions - creates rows if needed
+    ' Simple overlay: writes from sample date forward, Days = 0,1,2...
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, rowIdx As Long
-    Dim logDate As Date, col As Long, daysCol As Long
+    Dim logDate As Date
+    Dim daysCol As Long, volCol As Long, runIdCol As Long
+    Dim chemCols(1 To 7) As Long
     Dim runDate As Date
 
     Set tbl = GetLiveTable(site)
+    runDate = Date  ' Today's date for row shading
     If tbl Is Nothing Then Exit Sub
 
-    runDate = Date  ' Run date is always today
+    ' Pre-fetch all column indices (avoids O(n*7) lookups in loop)
     daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
+    volCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
+    runIdCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)
+    For j = 1 To Core.METRIC_COUNT
+        chemCols(j) = Helpers.ColIdx(tbl, Schema.StdChemColName(j))
+    Next j
 
     n = UBound(r.Snaps)
     For i = 0 To n
@@ -45,17 +54,16 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
         rowIdx = EnsureRowForDate(tbl, logDate)
         If rowIdx = 0 Then Exit Sub  ' Failed to create row
 
-        ' Write Days column (relative to run date)
+        ' Write Days column (relative to run date: negative=past, 0=today, positive=future)
         With tbl.DataBodyRange
             If daysCol > 0 Then .Cells(rowIdx, daysCol) = CLng(logDate - runDate)
 
             ' Write Standard columns: Volume + all 7 chemistry metrics
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)) = r.Snaps(i).Vol
-            For j = 1 To Schema.ChemistryCount()
-                col = Helpers.ColIdx(tbl, Schema.StdChemColName(j))
-                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Chem(j)
+            If volCol > 0 Then .Cells(rowIdx, volCol) = r.Snaps(i).Vol
+            For j = 1 To Core.METRIC_COUNT
+                If chemCols(j) > 0 Then .Cells(rowIdx, chemCols(j)) = r.Snaps(i).Chem(j)
             Next j
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
+            If runIdCol > 0 Then .Cells(rowIdx, runIdCol) = runId
         End With
     Next i
 
@@ -75,44 +83,50 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
     ' Writes Enhanced predictions + hidden layer - updates existing rows
     Dim tbl As ListObject
     Dim i As Long, j As Long, n As Long, rowIdx As Long
-    Dim logDate As Date, col As Long, daysCol As Long
+    Dim logDate As Date
+    Dim daysCol As Long, volCol As Long, runIdCol As Long
+    Dim chemCols(1 To 7) As Long, hidCols(1 To 7) As Long
     Dim runDate As Date
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
 
     runDate = Date  ' Run date is always today
+
+    ' Pre-fetch all column indices (avoids O(n*14) lookups in loop)
     daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
+    volCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
+    runIdCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)
+    For j = 1 To Core.METRIC_COUNT
+        chemCols(j) = Helpers.ColIdx(tbl, Schema.EnhChemColName(j))
+        hidCols(j) = Helpers.ColIdx(tbl, Schema.EnhHidColName(j))
+    Next j
 
     n = UBound(r.Snaps)
     For i = 0 To n
         logDate = cfg.StartDate + i
 
         ' Find row for this date (should exist from Standard run)
-        rowIdx = FindRowByDate(tbl, logDate)
+        rowIdx = Helpers.FindRowByDate(tbl, logDate)
         If rowIdx = 0 Then
             ' Row doesn't exist - create it (Enhanced-only run)
             rowIdx = EnsureRowForDate(tbl, logDate)
             If rowIdx = 0 Then Exit Sub
         End If
 
-        ' Write Days column (relative to run date) - update in case row was just created
+        ' Write Days column (relative to run date: negative=past, 0=today, positive=future)
         With tbl.DataBodyRange
             If daysCol > 0 Then .Cells(rowIdx, daysCol) = CLng(logDate - runDate)
 
             ' Write Enhanced columns: Volume + all 7 chemistry visible + hidden
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)) = r.Snaps(i).Vol
+            If volCol > 0 Then .Cells(rowIdx, volCol) = r.Snaps(i).Vol
 
-            For j = 1 To Schema.ChemistryCount()
-                ' Visible layer chemistry
-                col = Helpers.ColIdx(tbl, Schema.EnhChemColName(j))
-                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Chem(j)
-                ' Hidden layer mass (for TwoBucket continuity)
-                col = Helpers.ColIdx(tbl, Schema.EnhHidColName(j))
-                If col > 0 Then .Cells(rowIdx, col) = r.Snaps(i).Hidden(j)
+            For j = 1 To Core.METRIC_COUNT
+                If chemCols(j) > 0 Then .Cells(rowIdx, chemCols(j)) = r.Snaps(i).Chem(j)
+                If hidCols(j) > 0 Then .Cells(rowIdx, hidCols(j)) = r.Snaps(i).Hidden(j)
             Next j
 
-            .Cells(rowIdx, Helpers.ColIdx(tbl, Schema.LIVE_COL_RUNID)) = runId
+            If runIdCol > 0 Then .Cells(rowIdx, runIdCol) = runId
         End With
     Next i
 
@@ -162,7 +176,7 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
         logDate = tbl.DataBodyRange.Cells(i, 1).Value
 
         ' Find matching telemetry row
-        rowIdx = FindTelemRowByDate(tblTelem, logDate)
+        rowIdx = Helpers.FindRowByDate(tblTelem, logDate)
         If rowIdx > 0 Then
             ' Get telemetry values (may be empty)
             If ecCol > 0 Then telemEC = tblTelem.DataBodyRange.Cells(rowIdx, ecCol).Value
@@ -244,12 +258,6 @@ End Sub
 
 ' ==== Row Lookup/Creation ===================================================
 
-Private Function FindRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
-    ' Returns row index (1-based) for date, or 0 if not found
-    ' Delegates to shared O(1) utility
-    FindRowByDate = Helpers.FindRowByDate(tbl, targetDate)
-End Function
-
 Private Function EnsureRowForDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
     ' Finds row for date or creates new row in sorted position
     ' Returns row index (1-based)
@@ -257,7 +265,7 @@ Private Function EnsureRowForDate(ByVal tbl As ListObject, ByVal targetDate As D
     Dim rowDate As Date
 
     ' Check if row exists
-    EnsureRowForDate = FindRowByDate(tbl, targetDate)
+    EnsureRowForDate = Helpers.FindRowByDate(tbl, targetDate)
     If EnsureRowForDate > 0 Then Exit Function
 
     ' Find insert position (keep sorted by date)
@@ -285,12 +293,6 @@ Private Function EnsureRowForDate(ByVal tbl As ListObject, ByVal targetDate As D
     newRow.Range.Cells(1, 1).Value = targetDate
 End Function
 
-Private Function FindTelemRowByDate(ByVal tbl As ListObject, ByVal targetDate As Date) As Long
-    ' Returns row index (1-based) for date in telemetry table, or 0 if not found
-    ' Delegates to shared O(1) utility
-    FindTelemRowByDate = Helpers.FindRowByDate(tbl, targetDate)
-End Function
-
 ' ==== Delete Functions ======================================================
 
 Public Sub DeleteAfterDate(ByVal cutoffDate As Date, ByVal site As String)
@@ -309,33 +311,6 @@ Public Sub DeleteAfterDate(ByVal cutoffDate As Date, ByVal site As String)
         End If
     Next i
 End Sub
-
-Public Sub ClearSiteLog(ByVal site As String)
-    ' Clears entire live table for site
-    Dim tbl As ListObject
-
-    Set tbl = GetLiveTable(site)
-    If tbl Is Nothing Then Exit Sub
-    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
-End Sub
-
-' ==== Read Functions ========================================================
-
-Public Function GetLatestLogDate(ByVal site As String) As Date
-    ' Returns the most recent date in site's live table (0 if empty)
-    Dim tbl As ListObject
-    Dim i As Long, d As Date, maxDate As Date
-
-    Set tbl = GetLiveTable(site)
-    If Not Helpers.HasData(tbl) Then Exit Function
-
-    maxDate = 0
-    For i = 1 To tbl.ListRows.Count
-        d = tbl.DataBodyRange.Cells(i, 1).Value
-        If d > maxDate Then maxDate = d
-    Next i
-    GetLatestLogDate = maxDate
-End Function
 
 ' ==== Table Access ===========================================================
 

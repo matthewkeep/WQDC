@@ -56,10 +56,11 @@ Private Function BuildScenarios() As Scen()
     s(3).Days = 30: s(3).Qin = 1: s(3).Qout = 3: s(3).TrigVol = 200
     s(3).ExpDay = -1
 
-    ' 5: TwoBucket mixing
+    ' 5: TwoBucket mixing - hidden mass (20000) >> visible mass (5000)
+    ' Alpha = 1-e^(-1/5) ≈ 0.18, so ~18%/day mixes up -> triggers at day 3
     s(4).Nm = "TwoBucket mix": s(4).Vol = 100: s(4).Chem = 50: s(4).HidMass = 20000
     s(4).Mode = "TwoBucket": s(4).Days = 30: s(4).Tau = 5: s(4).TrigChem = 100
-    s(4).ExpDay = 8: s(4).ExpMetric = "EC"
+    s(4).ExpDay = 3: s(4).ExpMetric = "EC"
 
     ' 6: Fast fill
     s(5).Nm = "Fast fill": s(5).Vol = 99: s(5).Mode = "Simple"
