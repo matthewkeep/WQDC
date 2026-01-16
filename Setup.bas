@@ -32,8 +32,8 @@ Public Sub Build()
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
-    Error.TraceErr "Setup.Build"
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
+    Error.TraceErr "Setup.Build"
 End Sub
 
 Public Sub Seed()
@@ -50,12 +50,17 @@ Public Sub Seed()
     ' Seed inputs last (calls Loader which reads from Config/Results)
     SeedInput
 
+    ' Reapply table-based validations now that tables have data
+    Dim ws As Worksheet
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_INPUT)
+    ApplyTableValidations ws
+
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
-    Error.TraceErr "Setup.Seed"
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
+    Error.TraceErr "Setup.Seed"
 End Sub
 
 Public Sub BuildAll(): RepairEvents: Build: Seed: Initialize: End Sub
@@ -66,7 +71,7 @@ Public Sub Rebuild()
 End Sub
 
 Public Sub Initialize()
-    ' Reads all RR sites from tblCatalog and creates per-site infrastructure:
+    ' Reads all RR sites from tblIndex and creates per-site infrastructure:
     ' - Telemetry columns (EC, Vol for each site)
     ' - Live tables (tblLive_{site}) - date-centric log with Std/Enh side-by-side
     ' - History tables (tblHistory_{site})
@@ -81,7 +86,7 @@ Public Sub Initialize()
 
     sites = GetAllSites()
     If Not IsArray(sites) Then
-        MsgBox "No sites found in Catalog. Add sites to tblCatalog first.", vbExclamation, "Initialize"
+        MsgBox "No sites found in Index. Add sites to tblIndex first.", vbExclamation, "Initialize"
         GoTo Done
     End If
 
@@ -104,19 +109,19 @@ Done:
     Exit Sub
 Fail:
     Application.Calculation = cm: Application.ScreenUpdating = True: Application.EnableEvents = True
-    Error.TraceErr "Setup.Initialize"
     MsgBox "Error: " & Err.Description, vbExclamation, "Initialize"
+    Error.TraceErr "Setup.Initialize"
 End Sub
 
 Private Function GetAllSites() As Variant
-    ' Returns array of unique RR site names from first column of tblCatalog
+    ' Returns array of unique RR site names from first column of tblIndex
     Dim ws As Worksheet, tbl As ListObject, row As ListRow
     Dim dict As Object, site As String
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
     If ws Is Nothing Then Exit Function
-    Set tbl = ws.ListObjects(Schema.TABLE_CATALOG)
+    Set tbl = ws.ListObjects(Schema.TABLE_INDEX)
     On Error GoTo 0
     If tbl Is Nothing Then Exit Function
     If tbl.ListRows.Count = 0 Then Exit Function
@@ -173,7 +178,7 @@ End Function
 Public Sub Clean()
     Dim ws As Worksheet, nm As Name, sheets As Variant, i As Long
     sheets = Array(Schema.SHEET_INPUT, Schema.SHEET_CONFIG, Schema.SHEET_RESULTS, _
-                   Schema.SHEET_HISTORY, Schema.SHEET_CHART, Schema.SHEET_LOG)
+                   Schema.SHEET_RECORD, Schema.SHEET_CHART, Schema.SHEET_LOG)
     Application.DisplayAlerts = False
     For i = LBound(sheets) To UBound(sheets)
         On Error Resume Next
@@ -194,7 +199,7 @@ Private Sub MakeSheets()
     MakeSheet Schema.SHEET_INPUT
     MakeSheet Schema.SHEET_CONFIG
     MakeSheet Schema.SHEET_RESULTS
-    MakeSheet Schema.SHEET_HISTORY
+    MakeSheet Schema.SHEET_RECORD
     MakeSheet Schema.SHEET_CHART
     MakeSheet Schema.SHEET_LOG
 End Sub
@@ -216,13 +221,13 @@ End Sub
 ' ==== Input Sheet ============================================================
 
 Private Sub SetupInput()
-    ' Minimal setup: text (if empty), named ranges, conditional formatting
-    ' User formatting preserved - only writes labels if cell empty
+    ' Sets up Inputs sheet: labels, named ranges, conditional formatting
+    ' Only writes labels if cell empty (preserves user formatting)
     Dim ws As Worksheet, chem As Variant, n As Long, i As Long
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_INPUT)
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
-    ' Row 1-2: Reservoir headers
+    ' --- Main Data Area (A1:L5) ---
     SetIfEmpty ws.Range("A1"), "RESERVOIR"
     AddNm Schema.NAME_SITE, ws.Range("A2")
     SetIfEmpty ws.Range("B2"), Schema.VOLUME_METRIC_NAME
@@ -231,7 +236,6 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("K2"), "Output"
     SetIfEmpty ws.Range("L2"), "Run Date"
 
-    ' Row 3-5: Data rows
     SetIfEmpty ws.Range("A3"), "Latest"
     AddNm Schema.NAME_INIT_VOL, ws.Range("B3")
     AddNm Schema.NAME_RES_ROW, ws.Range("C3").Resize(1, n)
@@ -242,6 +246,7 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("A4"), "Trigger"
     AddNm Schema.NAME_TRIGGER_VOL, ws.Range("B4")
     AddNm Schema.NAME_LIMIT_ROW, ws.Range("C4").Resize(1, n)
+    AddNm Schema.NAME_TRIGGER_PRESET, ws.Range("J4")
 
     SetIfEmpty ws.Range("A5"), "Predicted"
     AddNm Schema.NAME_RESULT_VOL, ws.Range("B5")
@@ -249,49 +254,50 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("J5"), "Standard"
     AddNm Schema.NAME_PRED_MODE, ws.Range("J5")
 
-    ' Row 7-8: Inputs table
+    ' --- Inputs Table (A7+) ---
     SetIfEmpty ws.Range("A7"), "INPUTS"
     EnsureIRTable ws, chem, n
 
-    ' Column N-P: Results
+    ' --- Results Block (N1:P4) ---
     SetIfEmpty ws.Range("N1"), "RESULTS"
     SetIfEmpty ws.Range("N2"), "Mode"
     SetIfEmpty ws.Range("O2"), "Days"
     SetIfEmpty ws.Range("P2"), "Date"
     SetIfEmpty ws.Range("N3"), "Standard"
     AddNm Schema.NAME_STD_TRIGGER, ws.Range("O3")
-    If IsEmpty(ws.Range("P3").Value) Then
-        ws.Range("P3").Formula = "=" & Schema.NAME_RUN_DATE & "+O3"
-        ws.Range("P3").NumberFormat = "d/mm/yy"
-    End If
+    SetDateFormula ws.Range("P3"), "=" & Schema.NAME_RUN_DATE & "+O3"
     SetIfEmpty ws.Range("N4"), "Enhanced"
     AddNm Schema.NAME_ENH_TRIGGER, ws.Range("O4")
-    If IsEmpty(ws.Range("P4").Value) Then
-        ws.Range("P4").Formula = "=" & Schema.NAME_RUN_DATE & "+O4"
-        ws.Range("P4").NumberFormat = "d/mm/yy"
-    End If
+    SetDateFormula ws.Range("P4"), "=" & Schema.NAME_RUN_DATE & "+O4"
 
-    ' Column N-O: Enhanced section
-    SetIfEmpty ws.Range("N7"), "ENHANCED"
-    SetIfEmpty ws.Range("N8"), "Enabled": AddNm Schema.NAME_ENHANCED_MODE, ws.Range("O8")
-    SetIfEmpty ws.Range("N9"), "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("O9")
-    SetIfEmpty ws.Range("N10"), "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("O10")
-    SetIfEmpty ws.Range("N11"), "Rain Factor": AddNm Schema.NAME_RAIN_FACTOR, ws.Range("O11")
-    SetIfEmpty ws.Range("N12"), "Mixing Model": AddNm Schema.NAME_MIXING_MODEL, ws.Range("O12")
-    SetIfEmpty ws.Range("N13"), "Tau (days)": AddNm Schema.NAME_TAU, ws.Range("O13")
-    SetIfEmpty ws.Range("N14"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("O14")
+    ' --- Sign Off Block (N7:O10) ---
+    SetIfEmpty ws.Range("N7"), "SIGN OFF"
+    SetIfEmpty ws.Range("N8"), "Name"
+    AddNm Schema.NAME_SIGN_OFF_NAME, ws.Range("O8")
+    SetIfEmpty ws.Range("N9"), "Signed"
+    SetIfEmpty ws.Range("N10"), "Position"
+    SetLookupFormula ws.Range("O10"), "=IFERROR(VLOOKUP(" & Schema.NAME_SIGN_OFF_NAME & "," & Schema.TABLE_SIGN & ",2,FALSE),"""")"
 
-    ' Column N-O: Hidden Mass section
-    SetIfEmpty ws.Range("N15"), "HIDDEN MASS"
-    For i = 0 To n - 1: SetIfEmpty ws.Cells(16 + i, 14), chem(i): Next i
-    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("O16").Resize(n, 1)
+    ' --- Enhanced Block (R1:S16) ---
+    SetIfEmpty ws.Range("R1"), "ENHANCED"
+    SetIfEmpty ws.Range("R2"), "Enabled": AddNm Schema.NAME_ENHANCED_MODE, ws.Range("S2")
+    SetIfEmpty ws.Range("R3"), "Telemetry Cal": AddNm Schema.NAME_TELEM_CAL, ws.Range("S3")
+    SetIfEmpty ws.Range("R4"), "Rainfall": AddNm Schema.NAME_RAINFALL_MODE, ws.Range("S4")
+    SetIfEmpty ws.Range("R5"), "Rain Factor": AddNm Schema.NAME_RAIN_FACTOR, ws.Range("S5")
+    SetIfEmpty ws.Range("R6"), "Mixing Model": AddNm Schema.NAME_MIXING_MODEL, ws.Range("S6")
+    SetIfEmpty ws.Range("R7"), "Tau (days)": AddNm Schema.NAME_TAU, ws.Range("S7")
+    SetIfEmpty ws.Range("R8"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("S8")
+    SetIfEmpty ws.Range("R9"), "HIDDEN MASS"
+    For i = 0 To n - 1: SetIfEmpty ws.Cells(10 + i, 18), chem(i): Next i
+    AddNm Schema.NAME_HIDDEN_MASS, ws.Range("S10").Resize(n, 1)
 
-    ' Conditional formatting (grey-out) - always reapply
-    ' Clear all first, then add in priority order (lowest first, Enhanced last = highest priority)
-    ws.Range("N9:O22").FormatConditions.Delete
-    ApplyRainFactorConditionalFormat ws.Range("N11:O11"), ws.Range("O10")
-    ApplyMixingConditionalFormat ws.Range("N13:O22"), ws.Range("O12")
-    ApplyEnhancedConditionalFormat ws.Range("N9:O22"), ws.Range("O8")
+    ' --- Conditional Formatting ---
+    ws.Range("N4:P4").FormatConditions.Delete
+    ws.Range("R3:S16").FormatConditions.Delete
+    ApplyGreyoutFormat ws.Range("N4:P4"), "=$S$2<>""On"""              ' Enhanced Off → grey results row
+    ApplyGreyoutFormat ws.Range("R5:S5"), "=$S$4=""Off"""              ' Rainfall Off → grey Rain Factor
+    ApplyGreyoutFormat ws.Range("R7:S16"), "=$S$6<>""TwoBucket"""      ' Simple → grey Tau/Surface/Hidden
+    ApplyGreyoutFormat ws.Range("R3:S16"), "=$S$2<>""On"""             ' Enhanced Off → grey all settings
 End Sub
 
 Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n As Long)
@@ -308,11 +314,11 @@ Private Sub EnsureIRTable(ByVal ws As Worksheet, ByVal chem As Variant, ByVal n 
         For i = 0 To n - 1: h(3 + i) = chem(i): Next i
         h(n + 3) = Schema.IR_COL_SAMPLE_DATE: h(n + 4) = Schema.IR_COL_ACTIVE
         h(n + 5) = Schema.IR_COL_ACTION
-        MakeTblLight ws, ws.Range("A8"), Schema.TABLE_IR, h
+        MakeTbl ws, ws.Range("A8"), Schema.TABLE_IR, h
 
         Set tbl = ws.ListObjects(Schema.TABLE_IR)
         If Not tbl Is Nothing Then
-            StyleActionHeader tbl, Schema.IR_COL_ACTION, "Add Input"
+            tbl.ListColumns(Schema.IR_COL_ACTION).Name = "Add Input"
         End If
     End If
     ' Note: Conditional formatting applied by Loader after data is populated
@@ -325,13 +331,16 @@ Private Sub SetupConfig()
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
-    ws.Range("A1") = "CATALOG": ws.Range("A1").Font.Bold = True
-    MakeTbl ws, ws.Range("A2"), Schema.TABLE_CATALOG, Array("RR", "IR", "Flow")
+    ws.Range("A1") = "INDEX": ws.Range("A1").Font.Bold = True
+    MakeTbl ws, ws.Range("A2"), Schema.TABLE_INDEX, Array("RR", "IR", "Flow")
 
     ws.Range("E1") = "TRIGGERS": ws.Range("E1").Font.Bold = True
     ReDim h(1 To n + 2): h(1) = "Preset": h(2) = Schema.VOLUME_METRIC_NAME
     For i = 1 To n: h(2 + i) = chem(i - 1): Next i
-    MakeTbl ws, ws.Range("E2"), Schema.TABLE_TRIGGER, h
+    MakeTbl ws, ws.Range("E2"), Schema.TABLE_TRIGGERS, h
+
+    ws.Range("O1") = "USERS": ws.Range("O1").Font.Bold = True
+    MakeTbl ws, ws.Range("O2"), Schema.TABLE_SIGN, Array("Name", "Position")
 End Sub
 
 ' ==== Results Sheet ==========================================================
@@ -396,8 +405,8 @@ Private Sub SeedConfig()
     Dim ws As Worksheet, tbl As ListObject
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
 
-    ' Catalog: RR sites with their IR inflow sources
-    Set tbl = ws.ListObjects(Schema.TABLE_CATALOG)
+    ' Index: RR sites with their IR inflow sources
+    Set tbl = ws.ListObjects(Schema.TABLE_INDEX)
     If Not tbl Is Nothing Then
         If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
         EnsureRows tbl, 4
@@ -410,13 +419,23 @@ Private Sub SeedConfig()
     End If
 
     ' Trigger levels (regulatory release limits)
-    Set tbl = ws.ListObjects(Schema.TABLE_TRIGGER)
+    Set tbl = ws.ListObjects(Schema.TABLE_TRIGGERS)
     If Not tbl Is Nothing Then
         If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
         EnsureRows tbl, 2
         '                    Name, Vol,  EC,   F_U,  F_Mn, SO4,  Mg,   Ca,   TAN
         tbl.DataBodyRange.Rows(1) = Array("Alert", 180, 400, 80, 4, 20, 8, 15, 0.2)
         tbl.DataBodyRange.Rows(2) = Array("Limit", 200, 450, 100, 5, 25, 10, 18, 0.25)
+    End If
+
+    ' Users (sign-off dropdown)
+    Set tbl = ws.ListObjects(Schema.TABLE_SIGN)
+    If Not tbl Is Nothing Then
+        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+        EnsureRows tbl, 3
+        tbl.DataBodyRange.Rows(1) = Array("J. Smith", "Senior Engineer")
+        tbl.DataBodyRange.Rows(2) = Array("A. Jones", "Environmental Officer")
+        tbl.DataBodyRange.Rows(3) = Array("M. Brown", "Site Manager")
     End If
 End Sub
 
@@ -511,7 +530,7 @@ Public Sub SeedFullSeason()
     Application.EnableEvents = False
     Application.Calculation = xlCalculationManual
 
-    SeedFullCatalog
+    SeedFullIndex
     SeedFullResults
     SeedFullTelemetry
 
@@ -527,11 +546,11 @@ Fail:
     MsgBox "Error: " & Err.Description, vbExclamation, "Setup"
 End Sub
 
-Private Sub SeedFullCatalog()
+Private Sub SeedFullIndex()
     ' Seeds catalog with 2 RR sites and their IR sources
     Dim ws As Worksheet, tbl As ListObject
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
-    Set tbl = ws.ListObjects(Schema.TABLE_CATALOG)
+    Set tbl = ws.ListObjects(Schema.TABLE_INDEX)
     If tbl Is Nothing Then Exit Sub
 
     ' Clear existing and add comprehensive catalog
@@ -775,7 +794,6 @@ Private Sub SetupChart()
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
     ws.Range("A1") = "SIMULATION CHARTS": ws.Range("A1").Font.Bold = True
-    ws.Range("A2") = "Run WQOC.Run to generate charts"
 End Sub
 
 ' ==== Log Sheet ===============================================================
@@ -786,11 +804,11 @@ Private Sub SetupLog()
     ws.Range("A1") = "LOG": ws.Range("A1").Font.Bold = True
 End Sub
 
-' ==== RunHistory Sheet ========================================================
+' ==== Record Sheet ============================================================
 
 Private Sub SetupHistory()
     Dim ws As Worksheet
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RECORD)
     ws.Range("A1") = "RUN HISTORY": ws.Range("A1").Font.Bold = True
 End Sub
 
@@ -801,7 +819,7 @@ Private Sub ClearPerSiteTables()
 
     On Error Resume Next
     Set wsLog = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    Set wsHist = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    Set wsHist = ThisWorkbook.Worksheets(Schema.SHEET_RECORD)
     On Error GoTo 0
 
     ' Clear Live tables
@@ -830,7 +848,7 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     Dim ws As Worksheet, tbl As ListObject, tblName As String
     Dim startCol As Long
 
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_HISTORY)
+    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RECORD)
     tblName = Helpers.HistoryTableName(site)
 
     ' Check if table already exists
@@ -843,19 +861,25 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     startCol = FindNextTableColumn(ws)
 
     ' Create table (no Site column - site is in table name)
-    ' Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
+    ' Single row per run with both Std and Enh results (Enh columns blank if disabled)
+    ' Includes snapshot columns for accurate rollback
     MakeTbl ws, ws.Cells(2, startCol), tblName, _
-        Array("RunId", "Timestamp", "RunDate", "Days", "Mode", _
+        Array("RunId", "Timestamp", "RunDate", "Days", _
               "RainfallMode", "TelemCal", "Tau", "SurfaceFrac", "RainFactor", _
-              "TriggerDay", "TriggerMetric", Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
+              "StdMode", "StdTriggerDay", "StdTriggerMetric", _
+              "EnhMode", "EnhTriggerDay", "EnhTriggerMetric", _
+              Schema.HISTORY_COL_SAMPLE_DATE, Schema.HISTORY_COL_TRIGGER_VOL, _
+              Schema.HISTORY_COL_RES_CHEM, Schema.HISTORY_COL_TRIGGER_CHEM, _
+              Schema.HISTORY_COL_HIDDEN_MASS, Schema.HISTORY_COL_IR_SNAPSHOT, _
+              Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
 
-    ' Style action column headers and format date columns
+    ' Format table
     Set tbl = ws.ListObjects(tblName)
     If Not tbl Is Nothing Then
-        StyleActionHeader tbl, Schema.HISTORY_COL_ACTION, ""
-        StyleActionHeader tbl, Schema.HISTORY_COL_LOAD, ""
         tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy hh:mm"  ' Timestamp
         tbl.ListColumns(3).Range.NumberFormat = "d/mm/yy"         ' RunDate
+        tbl.ListColumns(16).Range.NumberFormat = "d/mm/yy"        ' SampleDate
+        tbl.Range.WrapText = False
     End If
 End Sub
 
@@ -917,7 +941,7 @@ Public Sub EnsureSiteLiveTable(ByVal site As String)
     h(col) = Schema.LIVE_COL_RUNID
 
     ' Create table with light style (starts row 2)
-    MakeTblLight ws, ws.Cells(2, startCol), tblName, h
+    MakeTbl ws, ws.Cells(2, startCol), tblName, h
 
     ' Format Date column (entire column including header to prepare for future data)
     Set tbl = ws.ListObjects(tblName)
@@ -998,8 +1022,8 @@ Private Sub SetupControls()
     loadCell.Value = "Load Latest"
     With loadCell
         .Font.Bold = True
-        .Font.Color = Schema.COLOR_FONT_WHITE
-        .Interior.Color = Schema.COLOR_BUTTON_ON
+        .Font.Color = vbBlack
+        .Interior.Color = Schema.COLOR_BUTTON_LOAD
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
         .Borders.LineStyle = xlContinuous
@@ -1013,7 +1037,7 @@ Private Sub SetupControls()
     runCell.Value = "Run"
     With runCell
         .Font.Bold = True
-        .Font.Color = Schema.COLOR_FONT_WHITE
+        .Font.Color = vbBlack
         .Interior.Color = Schema.COLOR_BUTTON_ON
         .HorizontalAlignment = xlCenter
         .VerticalAlignment = xlCenter
@@ -1022,55 +1046,45 @@ Private Sub SetupControls()
     End With
     AddNm Schema.NAME_RUN_CELL, ws.Range("K5")
 
-    ' Site dropdown validation (from tblCatalog RR column)
-    With ws.Range(Schema.NAME_SITE).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & Schema.TABLE_CATALOG & "[RR]"")"
-    End With
-
-    ' Mixing model dropdown validation
-    With ws.Range(Schema.NAME_MIXING_MODEL).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:=Schema.MIXING_MODEL_LIST
-    End With
-
-    ' Rainfall mode dropdown validation
-    With ws.Range(Schema.NAME_RAINFALL_MODE).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:=Schema.RAINFALL_MODE_LIST
-    End With
+    ' Static dropdowns (no data dependency)
+    ApplyStaticDropdown ws, Schema.NAME_MIXING_MODEL, Schema.MIXING_MODEL_LIST
+    ApplyStaticDropdown ws, Schema.NAME_RAINFALL_MODE, Schema.RAINFALL_MODE_LIST
+    ' Note: Table-based dropdowns applied in Seed() after tables have data
 
 End Sub
 
 ' ==== Helpers ================================================================
 
-Private Sub ApplyEnhancedConditionalFormat(ByVal targetRange As Range, ByVal toggleCell As Range)
-    ' Greys out target range when Enhanced Mode is Off
-    Dim fc As FormatCondition
-    Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
-        Formula1:="=" & toggleCell.Address(True, True) & "<>""On""")
-    With fc
-        .Font.Color = RGB(180, 180, 180)  ' Grey text
-        .Interior.Color = RGB(242, 242, 242)  ' Light grey background
+Private Sub ApplyStaticDropdown(ByVal ws As Worksheet, ByVal rangeName As String, ByVal listStr As String)
+    ' Applies dropdown with static comma-separated list (silent failure)
+    On Error Resume Next
+    With ws.Range(rangeName).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:=listStr
     End With
 End Sub
 
-Private Sub ApplyRainFactorConditionalFormat(ByVal targetRange As Range, ByVal rainfallCell As Range)
-    ' Greys out Rain Factor when Rainfall is Off
-    Dim fc As FormatCondition
-    Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
-        Formula1:="=" & rainfallCell.Address(True, True) & "=""Off""")
-    With fc
-        .Font.Color = RGB(180, 180, 180)  ' Grey text
-        .Interior.Color = RGB(242, 242, 242)  ' Light grey background
+Private Sub ApplyTableDropdown(ByVal ws As Worksheet, ByVal rangeName As String, _
+                               ByVal tableName As String, ByVal columnName As String)
+    ' Applies dropdown from table column using INDIRECT (silent failure)
+    On Error Resume Next
+    With ws.Range(rangeName).Validation
+        .Delete
+        .Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & tableName & "[" & columnName & "]"")"
     End With
 End Sub
 
-Private Sub ApplyMixingConditionalFormat(ByVal targetRange As Range, ByVal modelCell As Range)
-    ' Greys out Tau/Surface Fraction/Hidden Mass when Mixing Model is Simple
+Private Sub ApplyTableValidations(ByVal ws As Worksheet)
+    ' Table-based dropdowns (requires Seed to populate tables first)
+    ApplyTableDropdown ws, Schema.NAME_SITE, Schema.TABLE_INDEX, "RR"
+    ApplyTableDropdown ws, Schema.NAME_TRIGGER_PRESET, Schema.TABLE_TRIGGERS, "Preset"
+    ApplyTableDropdown ws, Schema.NAME_SIGN_OFF_NAME, Schema.TABLE_SIGN, "Name"
+End Sub
+
+Private Sub ApplyGreyoutFormat(ByVal targetRange As Range, ByVal formula As String)
+    ' Greys out target range when formula evaluates to True
     Dim fc As FormatCondition
-    Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, _
-        Formula1:="=" & modelCell.Address(True, True) & "<>""TwoBucket""")
+    Set fc = targetRange.FormatConditions.Add(Type:=xlExpression, Formula1:=formula)
     With fc
         .Font.Color = RGB(180, 180, 180)  ' Grey text
         .Interior.Color = RGB(242, 242, 242)  ' Light grey background
@@ -1080,7 +1094,7 @@ End Sub
 Public Sub ApplyIRActiveConditionalFormat(ByVal tbl As ListObject)
     ' Greys out IR table rows when Active column = "No"
     ' Applied to DataBodyRange - Excel auto-extends to new table rows
-    ' Call this after IR table has data (from Loader.PopulateIRFromCatalog)
+    ' Call this after IR table has data (from Loader.PopulateIRFromIndex)
     Dim activeCol As Long, fc As FormatCondition
     Dim activeColLetter As String
 
@@ -1114,6 +1128,19 @@ Private Sub SetIfEmpty(ByVal rng As Range, ByVal v As Variant)
     If IsEmpty(rng.Value) Then rng.Value = v
 End Sub
 
+Private Sub SetDateFormula(ByVal rng As Range, ByVal formula As String)
+    ' Sets date formula if cell is empty
+    If IsEmpty(rng.Value) Then
+        rng.formula = formula
+        rng.NumberFormat = "d/mm/yy"
+    End If
+End Sub
+
+Private Sub SetLookupFormula(ByVal rng As Range, ByVal formula As String)
+    ' Sets lookup formula if cell is empty
+    If IsEmpty(rng.Value) Then rng.formula = formula
+End Sub
+
 Private Sub MakeTbl(ByVal ws As Worksheet, ByVal start As Range, ByVal nm As String, ByVal h As Variant)
     ' Creates table if not exists, clears data if exists (preserves formatting)
     ' Tables start empty (no data rows) - use EnsureRows to add rows
@@ -1124,25 +1151,7 @@ Private Sub MakeTbl(ByVal ws As Worksheet, ByVal start As Range, ByVal nm As Str
         Exit Sub
     End If
     If IsArray(h) Then n = UBound(h) - LBound(h) + 1 Else n = 1
-    start.Resize(1, n) = h: start.Resize(1, n).Font.Bold = True
-    Set tbl = ws.ListObjects.Add(xlSrcRange, start.Resize(2, n), , xlYes)
-    tbl.Name = nm
-    On Error Resume Next: tbl.TableStyle = "TableStyleLight1": On Error GoTo 0
-    ' Remove initial blank row so table starts empty
-    If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
-End Sub
-
-Private Sub MakeTblLight(ByVal ws As Worksheet, ByVal start As Range, ByVal nm As String, ByVal h As Variant)
-    ' Creates table if not exists, clears data if exists (preserves formatting)
-    ' Tables start empty (no data rows) - use EnsureRows to add rows
-    Dim n As Long, tbl As ListObject
-    On Error Resume Next: Set tbl = ws.ListObjects(nm): On Error GoTo 0
-    If Not tbl Is Nothing Then
-        If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
-        Exit Sub
-    End If
-    If IsArray(h) Then n = UBound(h) - LBound(h) + 1 Else n = 1
-    start.Resize(1, n) = h: start.Resize(1, n).Font.Bold = True
+    start.Resize(1, n) = h
     Set tbl = ws.ListObjects.Add(xlSrcRange, start.Resize(2, n), , xlYes)
     tbl.Name = nm
     On Error Resume Next: tbl.TableStyle = "TableStyleLight1": On Error GoTo 0
@@ -1155,35 +1164,3 @@ Private Sub EnsureRows(ByVal tbl As ListObject, ByVal n As Long)
     Do While tbl.ListRows.Count < n: tbl.ListRows.Add: Loop
 End Sub
 
-Private Sub StyleActionHeader(ByVal tbl As ListObject, ByVal colName As String, ByVal txt As String)
-    ' Style the header cell of an action column (blue, underlined, hyperlink-like)
-    Dim col As ListColumn, hdrCell As Range
-    On Error Resume Next
-    Set col = tbl.ListColumns(colName)
-    On Error GoTo 0
-    If col Is Nothing Then Exit Sub
-
-    Set hdrCell = tbl.HeaderRowRange.Cells(1, col.Index)
-    If Len(txt) > 0 Then hdrCell.Value = txt
-    With hdrCell
-        .Font.Color = Schema.COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-        .Font.Bold = False
-    End With
-End Sub
-
-Private Sub StyleActionColumn(ByVal tbl As ListObject, ByVal colName As String)
-    ' Style data cells in action column (blue, underlined)
-    Dim col As ListColumn, dataRng As Range
-    On Error Resume Next
-    Set col = tbl.ListColumns(colName)
-    On Error GoTo 0
-    If col Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
-
-    Set dataRng = tbl.DataBodyRange.Columns(col.Index)
-    With dataRng
-        .Font.Color = Schema.COLOR_ACTION_FONT
-        .Font.Underline = xlUnderlineStyleSingle
-    End With
-End Sub

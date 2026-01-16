@@ -2,6 +2,13 @@
 
 Accumulated learnings. All agents should reference this before making changes.
 
+## Deleted Modules (Do Not Recreate)
+
+| Module | Reason | Alternative |
+|--------|--------|-------------|
+| Storage.bas | Never integrated, dead code | Use SimLog + History directly |
+| EventBus.bas | Over-engineered 5-level indirection | Direct calls in Events.bas |
+
 ## VBA Language
 
 | Issue | Fix |
@@ -60,24 +67,46 @@ Accumulated learnings. All agents should reference this before making changes.
 - Using Windows-only APIs without checking
 - FormatConditions.Delete in each helper (clears overlapping rules)
 - Dropdowns for On/Off fields (use double-click toggle instead)
+- Thin wrapper functions that just delegate to Helpers (deleted Jan 2026)
+- EventBus-style indirection for simple event handling (deleted Jan 2026)
+- O(n) loops for date lookups when MATCH gives O(1) (fixed Jan 2026)
+- Delete/recreate charts every run (causes overflow on consecutive runs)
+- Large array allocation for chart data (bind to table columns instead)
+
+## Chart System Gotchas
+
+| Issue | Fix |
+|-------|-----|
+| Overflow on consecutive chart runs | Don't delete/recreate - update existing charts |
+| Chart data doesn't auto-update | Bind to `ListColumn.DataBodyRange` not arrays |
+| Charts disappear on site change | Don't delete charts - stack horizontally |
+| Chart naming conflicts | Use `cht_{site}_{metric}` pattern |
+| Series.Values with large array | Use table column range reference instead |
 
 ## Conditional Formatting Order
 
 ```vba
 ' Setup.bas - Correct order (Enhanced has highest priority)
-ws.Range("N9:O22").FormatConditions.Delete  ' Clear all first
-ApplyRainFactorConditionalFormat ...        ' Lowest priority
-ApplyMixingConditionalFormat ...            ' Medium priority
-ApplyEnhancedConditionalFormat ...          ' Highest priority (applied last)
+ws.Range("N4:P4").FormatConditions.Delete   ' Clear Enhanced results row
+ws.Range("R3:S16").FormatConditions.Delete  ' Clear Enhanced settings
+ApplyGreyoutFormat ws.Range("N4:P4"), ...   ' Enhanced results (greyed when Off)
+ApplyGreyoutFormat ws.Range("R5:S5"), ...   ' Rain Factor (greyed when Rainfall=Off)
+ApplyGreyoutFormat ws.Range("R7:S16"), ...  ' Mixing settings (greyed when Simple)
+ApplyGreyoutFormat ws.Range("R3:S16"), ...  ' Highest priority - whole block when Off
 ```
 
-## History Table Columns
+## History Table Columns (17 total)
 
 ```
-RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal,
-Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
+RunId, Timestamp, RunDate, Days, RainfallMode, TelemCal,
+Tau, SurfaceFrac, RainFactor,
+StdMode, StdTriggerDay, StdTriggerMetric,
+EnhMode, EnhTriggerDay, EnhTriggerMetric,
+Action, Load
 ```
 
+- One row per run (captures both Std and Enh results)
+- Enh columns blank when Enhanced disabled
 - Action: "Current" or "Rollback"
 - Load: Always "Load" (clickable to restore settings)
 
@@ -103,16 +132,25 @@ ErrVol, ErrEC, RunId
 
 **J5 Toggle:** Pred_Mode (Std/Enh) - controls which result displays in Predicted row
 
-**N-O Column (Enhanced Settings):**
+**N7:O10 Sign Off Block:**
 ```
-Row 7:  Enhanced header
-Row 8:  Enabled (toggle)
-Row 9:  Telemetry Cal (toggle)
-Row 10: Rainfall (dropdown)
-Row 11: Rain Factor (greyed when Rainfall=Off)
-Row 12: Mixing Model (dropdown)
-Row 13: Tau (greyed when Model=Simple)
-Row 14: Surface Fraction (greyed when Model=Simple)
-Row 15: Hidden Mass header (greyed when Model=Simple)
-Row 16-22: Hidden mass values (greyed when Model=Simple)
+N7:  Sign Off header
+N8:  Name label       O8: Name dropdown (linked to tblSign)
+N9:  Signed label     O9: Signed value
+N10: Position label   O10: Position (VLOOKUP from tblSign)
+```
+
+**R1:S16 Enhanced Settings Block (greyed when Enhanced=Off):**
+```
+R1:  Enhanced header
+R2:  Enabled          S2: On/Off (toggle)
+R3:  Telemetry Cal    S3: On/Off (toggle)
+R4:  Rainfall         S4: dropdown (greyed when Enhanced=Off)
+R5:  Rain Factor      S5: number (greyed when Rainfall=Off)
+R6:  Mixing Model     S6: dropdown
+R7:  Tau (days)       S7: number (greyed when Model=Simple)
+R8:  Surface Frac     S8: number (greyed when Model=Simple)
+R9:  Hidden Mass header (greyed when Model=Simple)
+R10-R16: Chemistry labels (greyed when Model=Simple)
+S10-S16: Hidden mass values
 ```

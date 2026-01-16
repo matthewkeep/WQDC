@@ -12,7 +12,7 @@ WQOC (Water Quality Optimisation Calculator) is an Excel/VBA simulation tool for
 
 ```vba
 Setup.BuildAll           ' Create sheets, buttons, seed data
-Setup.Initialize         ' Create per-site tables/columns from Catalog
+Setup.Initialize         ' Create per-site tables/columns from Index
 WQOC.Run                 ' Run simulation (Standard + Enhanced if enabled)
 WQOC.Rollback            ' Undo last run for current site
 Tests.RunSmokeSuite      ' 10 smoke tests
@@ -56,10 +56,8 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **Telemetry.bas** | Telemetry data access (Rain, EC, Vol) |
 | **History.bas** | Audit trail, rollback, LoadSettings (restore config) |
 | **SimLog.bas** | Date-centric live log (UPSERT to tblLive) |
-| **Storage.bas** | Consolidated persistence (SaveRun writes to all 3 destinations) |
 | **Loader.bas** | Site selection, IR/chemistry population |
 | **Events.bas** | Worksheet handlers, double-click toggles, action dispatching |
-| **EventBus.bas** | Centralized event dispatch (SampleDateChanged, SiteChanged) |
 | **WQOC.bas** | Entry point, orchestration, chart generation |
 | **Schema.bas** | Constants only (names, colors, defaults) |
 | **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, styling, range access) |
@@ -179,18 +177,22 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Row shading: Sample date = light cyan, Run date = light green
   - Triggered values: Red + bold formatting on triggered metric cell
 - **History table structure:**
-  - Columns: RunId, Timestamp, RunDate, Days, Mode, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, TriggerDay, TriggerMetric, Action, Load
+  - Columns: RunId, Timestamp, RunDate, Days, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, StdMode, StdTriggerDay, StdTriggerMetric, EnhMode, EnhTriggerDay, EnhTriggerMetric, Action, Load
+  - One row per run (captures both Std and Enh results; Enh columns blank when disabled)
   - Action column: "Current" (latest) or "Rollback" (older runs)
   - Load column: Click to restore settings without rollback
 - **Telemetry table:** Located on Results sheet at column L (tblTelemetry)
 - **Telemetry columns per site:** `EC (RP1)`, `Vol (RP1)` (Rain is global)
-- **RunId format:** `STD-{site}-{date}-{seq}`, `ENH-{site}-{date}-{seq}`
+- **RunId format:** `{site}-{date}-{seq}` (e.g., `RP1-20260115-001`)
 - **Rollback:** Deletes future data, loads settings, auto-runs simulation
 - **Load Settings:** Restores config to Inputs (no deletion, no run)
-- **Charts:** 7 dual-axis charts (one per chemistry metric)
-  - Left Y-axis: Chemistry metric (Std + Enh solid lines)
-  - Right Y-axis: Volume (Std + Enh dashed lines)
+- **Charts:** 7 charts per site (1 dual-axis, 6 single-axis), stacked vertically
+  - Named `cht_{site}_{metric}` (e.g., `cht_RP1_EC`)
+  - Created once, never deleted - data bound to table columns
+  - EC chart (first): Dual-axis with Volume on right Y-axis
+  - Other charts: Single-analyte only (no volume)
   - Styling: Std=Blue, Enh=Teal, Trigger=Red dotted
+  - Multiple sites stack horizontally (new site → new column to right)
 - Tables created on-demand (first run) or via `Setup.Initialize`
 
 ## Enhanced Mode
@@ -198,29 +200,39 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 - **Rainfall:** Telemetry in mm/day × RainFactor = volume added (ML)
 - **Hidden mass:** Auto-loads from tblLive when Sample Date changes
 - **Conditional UI:**
-  - Enhanced Off → greys all Enhanced settings (N9:O22)
-  - Rainfall Off → greys Rain Factor (N11:O11)
-  - Mixing Model Simple → greys Tau, Surface Fraction, Hidden Mass (N13:O22)
+  - Enhanced Off → greys all Enhanced settings (R3:S16)
+  - Rainfall Off → greys Rain Factor (R5:S5)
+  - Mixing Model Simple → greys Tau, Surface Fraction, Hidden Mass (R7:S16)
 - **Double-click toggles:** Enabled, Telemetry Cal (On/Off), Pred Mode (Standard/Enhanced)
 
 ## Inputs Sheet Layout
 
 **J5:** Pred_Mode toggle (Standard/Enhanced) - controls which result displays in Predicted row (Row 5)
 
-**Column N-O (Enhanced Settings):**
+**N4:P4:** Enhanced results row (greyed when Enhanced=Off)
+
+**N7:O10 Sign Off Block:**
+```
+N7:  Sign Off (header)
+N8:  Name label       O8: Name dropdown (linked to tblSign)
+N9:  Signed label     O9: Signed value
+N10: Position label   O10: Position (VLOOKUP from tblSign)
+```
+
+**Column R-S (Enhanced Settings):**
 
 ```
-N7:  Enhanced (header)
-N8:  Enabled           O8: On/Off (double-click toggle)
-N9:  Telemetry Cal     O9: On/Off (double-click toggle)
-N10: Rainfall          O10: Off/Hindcast/Hindcast+Forecast
-N11: Rain Factor       O11: number (greyed when Rainfall=Off)
-N12: Mixing Model      O12: Simple/TwoBucket
-N13: Tau (days)        O13: number (greyed when Model=Simple)
-N14: Surface Fraction  O14: number (greyed when Model=Simple)
-N15: Hidden Mass       (header, greyed when Model=Simple)
-N16-N22: Chemistry labels (greyed when Model=Simple)
-O16-O22: Hidden mass values
+R1:  Enhanced (header)
+R2:  Enabled           S2: On/Off (double-click toggle)
+R3:  Telemetry Cal     S3: On/Off (double-click toggle)
+R4:  Rainfall          S4: Off/Hindcast/Hindcast+Forecast
+R5:  Rain Factor       S5: number (greyed when Rainfall=Off)
+R6:  Mixing Model      S6: Simple/TwoBucket
+R7:  Tau (days)        S7: number (greyed when Model=Simple)
+R8:  Surface Fraction  S8: number (greyed when Model=Simple)
+R9:  Hidden Mass       (header, greyed when Model=Simple)
+R10-R16: Chemistry labels (greyed when Model=Simple)
+S10-S16: Hidden mass values
 ```
 
 **Predicted Row (Row 5):**
@@ -245,3 +257,72 @@ Tests.RunSmokeSuite      ' 10 smoke tests for core math
 Scenarios.RunAll         ' 6 regression scenarios
 Backtest.RunSeason       ' Season replay with A/B comparison (Std vs Enh)
 ```
+
+## Verified Patterns (Required)
+
+These patterns have been verified across the entire codebase. Follow them exactly.
+
+### Data Access (Mandatory)
+
+| Operation | Required Pattern | Never Do |
+|-----------|------------------|----------|
+| Get table | `Helpers.GetTable(sheetName, tableName)` | `ws.ListObjects()` |
+| Get column | `Helpers.ColIdx(tbl, colName)` | Hardcoded indices |
+| Get sheet | `Helpers.GetSheet(sheetName)` | `Worksheets()` |
+| Find row | `Helpers.FindRowByDate(tbl, date)` | Local loops |
+| Get date | `Helpers.GetDateVal(ws, rangeName)` | Raw `CDate()` |
+
+### Guards (Mandatory)
+
+```vba
+' Table access
+Set tbl = Helpers.GetTable(...)
+If tbl Is Nothing Then Exit Sub
+
+' Data body access
+If Not Helpers.HasData(tbl) Then Exit Sub
+' OR: If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+' Named range access
+On Error Resume Next
+Set rng = ws.Range(nm)
+On Error GoTo 0
+If rng Is Nothing Then Exit Sub
+```
+
+### Error Handling
+
+```vba
+' Public subs - always use Fail block
+Public Sub DoWork()
+    On Error GoTo Fail
+    ' ... code ...
+    Exit Sub
+Fail:
+    Error.TraceErr "Module.DoWork"
+End Sub
+
+' Private subs - inline guards or propagate
+' Functions - return Empty/Nothing on failure
+```
+
+### Column Names
+
+- Live table: Use `Schema.StdChemColName(j)`, `Schema.EnhChemColName(j)`, `Schema.EnhHidColName(j)`
+- Constants: Use `Schema.LIVE_COL_*`, `Schema.HISTORY_COL_*`
+- Never hardcode column name strings in business logic
+
+### Date Handling
+
+- Type: Always `Date` (not Double)
+- Parsing: `Helpers.GetDateVal()` or `CDate()`
+- MATCH lookup: `CDbl(targetDate)` for Application.Match
+- Arithmetic: Direct addition works (`cfg.StartDate + i`)
+
+## Architecture Reference
+
+See `.claude/docs/architecture.md` for:
+- Complete pipeline traces with line numbers
+- Wiring verification details
+- Integration point documentation
+- Table column mappings

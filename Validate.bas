@@ -2,6 +2,8 @@ Option Explicit
 ' Validate: Pre-flight workbook structure checks.
 ' Dependencies: Schema
 
+' ==== Public ==================================================================
+
 Private mIssues As Collection
 
 Public Function Check() As Boolean
@@ -28,11 +30,13 @@ Public Sub Report()
     End If
 End Sub
 
+' ==== Private Implementation ==================================================
+
 Private Sub ChkSheets()
     ChkSheet Schema.SHEET_INPUT
     ChkSheet Schema.SHEET_CONFIG
     ChkSheet Schema.SHEET_RESULTS
-    ChkSheet Schema.SHEET_HISTORY
+    ChkSheet Schema.SHEET_RECORD
     ChkSheet Schema.SHEET_LOG
     ChkSheet Schema.SHEET_CHART
 End Sub
@@ -63,6 +67,7 @@ Private Sub ChkRanges()
     ChkRange Schema.NAME_MIXING_MODEL
     ChkRange Schema.NAME_RAINFALL_MODE
     ChkRange Schema.NAME_TELEM_CAL
+    ChkRange Schema.NAME_SIGN_OFF_NAME
 End Sub
 
 Private Sub ChkRange(ByVal nm As String)
@@ -75,8 +80,9 @@ End Sub
 
 Private Sub ChkTables()
     ChkTable Schema.SHEET_INPUT, Schema.TABLE_IR
-    ChkTable Schema.SHEET_CONFIG, Schema.TABLE_CATALOG
-    ChkTable Schema.SHEET_CONFIG, Schema.TABLE_TRIGGER
+    ChkTable Schema.SHEET_CONFIG, Schema.TABLE_INDEX
+    ChkTable Schema.SHEET_CONFIG, Schema.TABLE_TRIGGERS
+    ChkTable Schema.SHEET_CONFIG, Schema.TABLE_SIGN
     ChkTable Schema.SHEET_RESULTS, Schema.TABLE_RESULTS
     ChkTable Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY
     ' Note: Log and History tables are per-site, created on-demand
