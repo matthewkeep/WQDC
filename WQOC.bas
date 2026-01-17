@@ -25,11 +25,12 @@ End Sub
 
 Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolean)
     ' Core simulation logic shared by Run and Replay
-    Dim s As State, logState As State, cfgStd As Config, cfgEnh As Config
+    Dim s As State, sOriginal As State, logState As State
+    Dim cfgStd As Config, cfgEnh As Config
     Dim rStd As Result, rEnh As Result
     Dim runId As String
     Dim site As String, cm As XlCalculation
-    Dim enhancedMode As Boolean, i As Long
+    Dim enhancedMode As Boolean, telemCalEnabled As Boolean, i As Long
 
     ' Pre-flight validation
     If Not Validate.Check() Then
@@ -61,6 +62,7 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
 
     ' Load state and Standard config
     s = Data.LoadState()
+    sOriginal = s  ' Save original for History (before TelemCal/Hidden modifications)
     cfgStd = Data.LoadConfig(site, "Standard")
 
     ' Validate: Run date must not be before sample date
@@ -77,7 +79,7 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
 
     ' Run Standard simulation
     rStd = Sim.Run(s, cfgStd)
-    SimLog.WriteLog rStd, cfgStd, "STD-" & runId, site
+    SimLog.WriteLog rStd, cfgStd, runId, site, "Standard"
     Data.SaveResult rStd, "Standard"
 
     ' Check if Enhanced mode is enabled
@@ -88,7 +90,8 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
         cfgEnh = Data.LoadConfig(site, "Enhanced")
 
         ' Apply telemetry calibration (snap to latest observed values) if enabled
-        If Data.GetTelemCalEnabled() Then
+        telemCalEnabled = Data.GetTelemCalEnabled()
+        If telemCalEnabled Then
             s = Data.SnapState(s, site)
         End If
 
@@ -109,13 +112,14 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
         End If
 
         rEnh = Sim.Run(s, cfgEnh)
-        SimLog.WriteLog rEnh, cfgEnh, "ENH-" & runId, site
+        SimLog.WriteLog rEnh, cfgEnh, runId, site, "Enhanced"
         Data.SaveResult rEnh, "Enhanced"
     End If
 
     ' Record history entry only for new runs (not replay)
+    ' Pass sOriginal (not s) - we want to record the INPUT state, not runtime-modified state
     If recordHistory Then
-        History.RecordRun cfgStd, rStd, cfgEnh, rEnh, enhancedMode, runId, site
+        History.RecordRun sOriginal, cfgStd, rStd, cfgEnh, rEnh, enhancedMode, telemCalEnabled, runId, site
     End If
 
     ' Generate charts for site
@@ -150,11 +154,11 @@ Public Sub Rollback()
 End Sub
 
 Private Function MakeRunId(ByVal site As String) As String
-    ' Creates run ID: RP1-20260114-001 (one per run, captures both Std and Enh)
-    Dim baseId As String, seq As Long
-    baseId = site & "-" & Format$(Now, "yyyymmdd")
+    ' Creates run ID: RP1_001 (one per run, captures both Std and Enh)
+    ' Sequence increments globally for site (not reset daily)
+    Dim seq As Long
     seq = History.CountRuns(site) + 1
-    MakeRunId = baseId & "-" & Format$(seq, "000")
+    MakeRunId = site & "_" & Format$(seq, "000")
 End Function
 
 ' ==== Chart Generation =======================================================
@@ -178,11 +182,7 @@ Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByVal hasE
 
     For chemIdx = 1 To Schema.ChemistryCount()
         Set cht = GetOrCreateChart(wsChart, site, chemIdx, chartLeft, chartTop)
-        If ChartNeedsSeries(cht) Then
-            BuildChartSeries cht.Chart, tbl, site, chemIdx, cfg, hasEnhanced
-        Else
-            UpdateChartRanges cht.Chart, tbl, chemIdx, hasEnhanced
-        End If
+        EnsureChartSeries cht.Chart, tbl, site, chemIdx, cfg, hasEnhanced
         chartTop = chartTop + Schema.CHART_HEIGHT + Schema.CHART_SPACING
     Next chemIdx
 End Sub
@@ -204,8 +204,14 @@ Private Function GetOrCreateChart(ByVal ws As Worksheet, ByVal site As String, _
     End If
 End Function
 
-Private Function ChartNeedsSeries(ByVal cht As ChartObject) As Boolean
-    ChartNeedsSeries = (cht.Chart.SeriesCollection.Count = 0)
+Private Function HasSeries(ByVal cht As Chart, ByVal seriesName As String) As Boolean
+    ' Returns True if chart has a series with the given name
+    Dim ser As Series
+    On Error Resume Next
+    For Each ser In cht.SeriesCollection
+        If ser.Name = seriesName Then HasSeries = True: Exit Function
+    Next ser
+    On Error GoTo 0
 End Function
 
 Private Function GetSiteChartLeft(ByVal ws As Worksheet, ByVal site As String) As Double
@@ -230,51 +236,97 @@ Private Function GetSiteChartLeft(ByVal ws As Worksheet, ByVal site As String) A
     End If
 End Function
 
-' ==== Chart Series Creation ==================================================
+' ==== Chart Series Management ================================================
 
-Private Sub BuildChartSeries(ByVal cht As Chart, ByVal tbl As ListObject, _
-                             ByVal site As String, ByVal chemIdx As Long, _
-                             ByRef cfg As Config, ByVal hasEnhanced As Boolean)
-    ' Creates all series for a chart from table columns
+Private Sub EnsureChartSeries(ByVal cht As Chart, ByVal tbl As ListObject, _
+                              ByVal site As String, ByVal chemIdx As Long, _
+                              ByRef cfg As Config, ByVal hasEnhanced As Boolean)
+    ' Ensures chart has correct series (idempotent - safe to call repeatedly)
+    ' Adds missing series, updates existing series ranges
     Dim chemName As String, chemUnit As String, includeVol As Boolean
-    Dim dateRng As Range
+    Dim dateRng As Range, needsFormat As Boolean
 
     chemName = Schema.ChemShortName(chemIdx)
     chemUnit = Schema.ChemistryNames()(chemIdx - 1)
     includeVol = (chemIdx = 1)  ' EC only
     Set dateRng = GetColRange(tbl, Schema.LIVE_COL_DATE)
 
-    cht.ChartType = xlLine
+    ' Set chart type if empty
+    If cht.SeriesCollection.Count = 0 Then
+        cht.ChartType = xlLine
+        needsFormat = True
+    End If
 
-    ' Chemistry series (left Y-axis)
-    AddDataSeries cht, "Std " & chemName, dateRng, _
-                  GetColRange(tbl, Schema.StdChemColName(chemIdx)), _
-                  Schema.COLOR_STD_LINE, False, xlPrimary
+    ' Standard chemistry (always)
+    EnsureSeries cht, "Std " & chemName, dateRng, _
+                 GetColRange(tbl, Schema.StdChemColName(chemIdx)), _
+                 Schema.COLOR_STD_LINE, False, xlPrimary
+
+    ' Enhanced chemistry (if enabled)
     If hasEnhanced Then
-        AddDataSeries cht, "Enh " & chemName, dateRng, _
-                      GetColRange(tbl, Schema.EnhChemColName(chemIdx)), _
-                      Schema.COLOR_ENH_LINE, False, xlPrimary
-    End If
-    If cfg.TriggerChem(chemIdx) > 0 Then
-        AddTriggerLine cht, chemName & " Trigger", dateRng, cfg.TriggerChem(chemIdx), xlPrimary
+        EnsureSeries cht, "Enh " & chemName, dateRng, _
+                     GetColRange(tbl, Schema.EnhChemColName(chemIdx)), _
+                     Schema.COLOR_ENH_LINE, False, xlPrimary
     End If
 
-    ' Volume series (right Y-axis, EC only)
+    ' Trigger line
+    If cfg.TriggerChem(chemIdx) > 0 Then
+        EnsureTriggerLine cht, chemName & " Trigger", dateRng, cfg.TriggerChem(chemIdx), xlPrimary
+    End If
+
+    ' Volume series (EC chart only)
     If includeVol Then
-        AddDataSeries cht, "Std Vol", dateRng, _
-                      GetColRange(tbl, Schema.LIVE_COL_STD_VOL), _
-                      Schema.COLOR_STD_LINE, True, xlSecondary
+        EnsureSeries cht, "Std Vol", dateRng, _
+                     GetColRange(tbl, Schema.LIVE_COL_STD_VOL), _
+                     Schema.COLOR_STD_LINE, True, xlSecondary
         If hasEnhanced Then
-            AddDataSeries cht, "Enh Vol", dateRng, _
-                          GetColRange(tbl, Schema.LIVE_COL_ENH_VOL), _
-                          Schema.COLOR_ENH_LINE, True, xlSecondary
+            EnsureSeries cht, "Enh Vol", dateRng, _
+                         GetColRange(tbl, Schema.LIVE_COL_ENH_VOL), _
+                         Schema.COLOR_ENH_LINE, True, xlSecondary
         End If
         If cfg.TriggerVol > 0 Then
-            AddTriggerLine cht, "Vol Trigger", dateRng, cfg.TriggerVol, xlSecondary
+            EnsureTriggerLine cht, "Vol Trigger", dateRng, cfg.TriggerVol, xlSecondary
         End If
     End If
 
-    FormatChart cht, site, chemName, chemUnit, includeVol
+    If needsFormat Then FormatChart cht, site, chemName, chemUnit, includeVol
+End Sub
+
+Private Sub EnsureSeries(ByVal cht As Chart, ByVal seriesName As String, _
+                         ByVal xRng As Range, ByVal yRng As Range, _
+                         ByVal lineColor As Long, ByVal dashed As Boolean, _
+                         ByVal axisGroup As XlAxisGroup)
+    ' Adds series if missing, updates ranges if exists
+    If yRng Is Nothing Then Exit Sub
+    If HasSeries(cht, seriesName) Then
+        UpdateSeriesRanges cht, seriesName, xRng, yRng
+    Else
+        AddDataSeries cht, seriesName, xRng, yRng, lineColor, dashed, axisGroup
+    End If
+End Sub
+
+Private Sub EnsureTriggerLine(ByVal cht As Chart, ByVal seriesName As String, _
+                              ByVal dateRng As Range, ByVal triggerVal As Double, _
+                              ByVal axisGroup As XlAxisGroup)
+    ' Adds trigger line if missing, updates if exists
+    If Not HasSeries(cht, seriesName) Then
+        AddTriggerLine cht, seriesName, dateRng, triggerVal, axisGroup
+    End If
+End Sub
+
+Private Sub UpdateSeriesRanges(ByVal cht As Chart, ByVal seriesName As String, _
+                               ByVal xRng As Range, ByVal yRng As Range)
+    ' Updates X and Y ranges for existing series
+    Dim ser As Series
+    On Error Resume Next
+    For Each ser In cht.SeriesCollection
+        If ser.Name = seriesName Then
+            ser.XValues = xRng
+            ser.Values = yRng
+            Exit For
+        End If
+    Next ser
+    On Error GoTo 0
 End Sub
 
 Private Sub AddDataSeries(ByVal cht As Chart, ByVal seriesName As String, _
@@ -328,35 +380,6 @@ Private Sub FormatChart(ByVal cht As Chart, ByVal site As String, _
         .HasLegend = True
         .Legend.Position = xlLegendPositionBottom
     End With
-End Sub
-
-' ==== Chart Update ===========================================================
-
-Private Sub UpdateChartRanges(ByVal cht As Chart, ByVal tbl As ListObject, _
-                              ByVal chemIdx As Long, ByVal hasEnhanced As Boolean)
-    ' Updates existing chart series to current table ranges
-    Dim ser As Series, nm As String
-    Dim dateRng As Range, stdChemRng As Range, enhChemRng As Range
-    Dim stdVolRng As Range, enhVolRng As Range
-
-    Set dateRng = GetColRange(tbl, Schema.LIVE_COL_DATE)
-    Set stdChemRng = GetColRange(tbl, Schema.StdChemColName(chemIdx))
-    Set enhChemRng = GetColRange(tbl, Schema.EnhChemColName(chemIdx))
-    Set stdVolRng = GetColRange(tbl, Schema.LIVE_COL_STD_VOL)
-    Set enhVolRng = GetColRange(tbl, Schema.LIVE_COL_ENH_VOL)
-
-    On Error Resume Next
-    For Each ser In cht.SeriesCollection
-        ser.XValues = dateRng
-        nm = ser.Name
-        Select Case True
-            Case nm Like "Std *" And InStr(nm, "Vol") > 0: ser.Values = stdVolRng
-            Case nm Like "Std *": ser.Values = stdChemRng
-            Case nm Like "Enh *" And hasEnhanced And InStr(nm, "Vol") > 0: ser.Values = enhVolRng
-            Case nm Like "Enh *" And hasEnhanced: ser.Values = enhChemRng
-        End Select
-    Next ser
-    On Error GoTo 0
 End Sub
 
 Private Function GetColRange(ByVal tbl As ListObject, ByVal colName As String) As Range

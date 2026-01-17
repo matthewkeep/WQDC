@@ -7,13 +7,15 @@ Option Explicit
 
 ' ==== Public ==================================================================
 
-Public Sub RecordRun(ByRef cfgStd As Config, ByRef rStd As Result, _
+Public Sub RecordRun(ByRef s As State, ByRef cfgStd As Config, ByRef rStd As Result, _
                      ByRef cfgEnh As Config, ByRef rEnh As Result, _
-                     ByVal hasEnhanced As Boolean, ByVal runId As String, ByVal site As String)
-    ' Records single history entry per run with both Std and Enh results
-    ' Enh columns are blank when hasEnhanced=False
+                     ByVal hasEnhanced As Boolean, ByVal telemCalEnabled As Boolean, _
+                     ByVal runId As String, ByVal site As String)
+    ' Records single history entry per run with bundled Std and Enh results
+    ' Uses State/Config passed from caller - avoids re-reading Inputs sheet
+    ' Only reads IR table and SignName (not in State/Config)
     Dim tbl As ListObject, row As ListRow, i As Long
-    Dim idCol As Long, tsCol As Long, dateCol As Long, daysCol As Long
+    Dim idCol As Long, tsCol As Long, dateCol As Long
     Dim actionCol As Long, loadCol As Long
 
     On Error GoTo Fail
@@ -25,7 +27,6 @@ Public Sub RecordRun(ByRef cfgStd As Config, ByRef rStd As Result, _
     idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
     tsCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_TIMESTAMP)
     dateCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNDATE)
-    daysCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_DAYS)
     actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
     loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
     If idCol = 0 Or actionCol = 0 Then Error.Trace "History.RecordRun", "Missing columns": Exit Sub
@@ -44,87 +45,86 @@ Public Sub RecordRun(ByRef cfgStd As Config, ByRef rStd As Result, _
         .Cells(1, idCol).Value = runId
         If tsCol > 0 Then .Cells(1, tsCol).Value = Now
         If dateCol > 0 Then .Cells(1, dateCol).Value = Date  ' Actual run date (today)
-        If daysCol > 0 Then .Cells(1, daysCol).Value = cfgStd.Days
-
-        ' Config columns (from Enhanced if available, else Standard)
-        If hasEnhanced Then
-            WriteColIfExists tbl, row, "RainfallMode", cfgEnh.RainfallMode
-            WriteColIfExists tbl, row, "Tau", cfgEnh.Tau
-            WriteColIfExists tbl, row, "SurfaceFrac", cfgEnh.SurfaceFrac
-            WriteColIfExists tbl, row, "RainFactor", cfgEnh.RainFactor
-        Else
-            WriteColIfExists tbl, row, "RainfallMode", ""
-            WriteColIfExists tbl, row, "Tau", ""
-            WriteColIfExists tbl, row, "SurfaceFrac", ""
-            WriteColIfExists tbl, row, "RainFactor", ""
-        End If
-        WriteColIfExists tbl, row, "TelemCal", IIf(Data.GetTelemCalEnabled(), "On", "Off")
-
-        ' Standard results (always present)
-        WriteColIfExists tbl, row, "StdMode", cfgStd.Mode
-        WriteColIfExists tbl, row, "StdTriggerDay", rStd.TriggerDay
-        WriteColIfExists tbl, row, "StdTriggerMetric", rStd.TriggerMetric
-
-        ' Enhanced results (blank if disabled)
-        If hasEnhanced Then
-            WriteColIfExists tbl, row, "EnhMode", cfgEnh.Mode
-            WriteColIfExists tbl, row, "EnhTriggerDay", rEnh.TriggerDay
-            WriteColIfExists tbl, row, "EnhTriggerMetric", rEnh.TriggerMetric
-        Else
-            WriteColIfExists tbl, row, "EnhMode", ""
-            WriteColIfExists tbl, row, "EnhTriggerDay", ""
-            WriteColIfExists tbl, row, "EnhTriggerMetric", ""
-        End If
-
         .Cells(1, actionCol).Value = Schema.ACTION_CURRENT
         If loadCol > 0 Then .Cells(1, loadCol).Value = "Load"
     End With
 
-    ' Capture full input state for accurate rollback
-    Dim wsInput As Worksheet, chemRng As Range, limitRng As Range, hiddenRng As Range
-    Dim irTbl As ListObject
+    ' Use State/Config data (already loaded by caller)
+    WriteColIfExists tbl, row, Schema.HISTORY_COL_SAMPLE_DATE, cfgStd.StartDate
+    WriteColIfExists tbl, row, Schema.HISTORY_COL_RES_CHEM, SerializeStateArray(s.Chem)
+    WriteColIfExists tbl, row, Schema.HISTORY_COL_TRIGGERS, SerializeTriggerConfig(cfgStd)
+    WriteColIfExists tbl, row, Schema.HISTORY_COL_HIDDEN_MASS, SerializeStateArray(s.Hidden)
 
+    ' IR table and SignName must still be read (not in State/Config)
+    Dim wsInput As Worksheet, irTbl As ListObject
     Set wsInput = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not wsInput Is Nothing Then
-        ' Sample date
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_SAMPLE_DATE, _
-            Helpers.GetDateVal(wsInput, Schema.NAME_SAMPLE_DATE)
-
-        ' Trigger volume
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_TRIGGER_VOL, _
-            Val(Helpers.ReadFromRange(wsInput, Schema.NAME_TRIGGER_VOL))
-
-        ' Reservoir chemistry
-        Set chemRng = Helpers.GetRng(wsInput, Schema.NAME_RES_ROW)
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_RES_CHEM, _
-            Helpers.SerializeRange(chemRng, Core.METRIC_COUNT)
-
-        ' Trigger limits
-        Set limitRng = Helpers.GetRng(wsInput, Schema.NAME_LIMIT_ROW)
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_TRIGGER_CHEM, _
-            Helpers.SerializeRange(limitRng, Core.METRIC_COUNT)
-
-        ' Hidden mass
-        Set hiddenRng = Helpers.GetRng(wsInput, Schema.NAME_HIDDEN_MASS)
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_HIDDEN_MASS, _
-            Helpers.SerializeColumn(hiddenRng, Core.METRIC_COUNT)
-
-        ' IR table snapshot
         Set irTbl = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
-        WriteColIfExists tbl, row, Schema.HISTORY_COL_IR_SNAPSHOT, _
-            Helpers.SerializeIRTable(irTbl)
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_IR_SNAPSHOT, Helpers.SerializeIRTable(irTbl)
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_SIGN_NAME, _
+            Helpers.ReadFromRange(wsInput, Schema.NAME_SIGN_OFF_NAME)
     End If
 
-    ' Prevent wrap text (IRSnapshot contains newlines)
-    row.Range.WrapText = False
+    ' Standard results: Days|TriggerMetric (Days = days from run date)
+    Dim runDate As Date, daysStd As Long, daysEnh As Long
+    runDate = Date
+    If rStd.TriggerDay = Core.NO_TRIGGER Then
+        daysStd = Core.NO_TRIGGER
+    Else
+        daysStd = CLng((cfgStd.StartDate + rStd.TriggerDay) - runDate)
+    End If
+    WriteColIfExists tbl, row, Schema.HISTORY_COL_STD_RESULT, _
+        Helpers.SerializeResult(daysStd, rStd.TriggerMetric)
 
-    ' Sort by RunDate then Timestamp (oldest first, newest last = Current)
+    ' Enhanced results and settings
+    If hasEnhanced Then
+        If rEnh.TriggerDay = Core.NO_TRIGGER Then
+            daysEnh = Core.NO_TRIGGER
+        Else
+            daysEnh = CLng((cfgEnh.StartDate + rEnh.TriggerDay) - runDate)
+        End If
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_ENH_RESULT, _
+            Helpers.SerializeResult(daysEnh, rEnh.TriggerMetric)
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_ENH_SETTINGS, _
+            Helpers.SerializeEnhSettingsHist("On", _
+                IIf(telemCalEnabled, "On", "Off"), _
+                cfgEnh.RainfallMode, cfgEnh.RainFactor, cfgEnh.Mode, _
+                cfgEnh.Tau, cfgEnh.SurfaceFrac)
+    Else
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_ENH_RESULT, ""
+        WriteColIfExists tbl, row, Schema.HISTORY_COL_ENH_SETTINGS, _
+            Helpers.SerializeEnhSettingsHist("Off", "", "", 0, "", 0, 0)
+    End If
+
+    row.Range.WrapText = False
     SortHistoryTable tbl
     Exit Sub
 
 Fail:
     Error.TraceErr "History.RecordRun"
 End Sub
+
+Private Function SerializeStateArray(ByRef arr() As Double) As String
+    ' Serializes State.Chem or State.Hidden array (1-based) to pipe-delimited string
+    ' Consistent with Helpers.SerializeRange pattern
+    Dim i As Long, parts() As String
+    ReDim parts(0 To Core.METRIC_COUNT - 1)
+    For i = 1 To Core.METRIC_COUNT
+        parts(i - 1) = CStr(arr(i))
+    Next i
+    SerializeStateArray = Join(parts, "|")
+End Function
+
+Private Function SerializeTriggerConfig(ByRef cfg As Config) As String
+    ' Serializes triggers from Config: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+    ' Consistent with Helpers.SerializeTriggers pattern
+    Dim i As Long, parts(0 To 7) As String
+    parts(0) = CStr(cfg.TriggerVol)
+    For i = 1 To Core.METRIC_COUNT
+        parts(i) = CStr(cfg.TriggerChem(i))
+    Next i
+    SerializeTriggerConfig = Join(parts, "|")
+End Function
 
 ' ==== Private Helpers =========================================================
 
@@ -168,8 +168,11 @@ Public Function LoadSettings(ByVal runId As String, ByVal site As String) As Boo
     If ws Is Nothing Then Exit Function
 
     ' Restore settings to Inputs sheet
-    Dim enhMode As Variant, irTbl As ListObject
+    Dim irTbl As ListObject
     Dim chemRng As Range, limitRng As Range, hiddenRng As Range
+    Dim enhSettingsStr As String, enabled As String, telemCal As String, rainfallMode As String
+    Dim rainFactor As Double, mixingModel As String, tau As Double, surfaceFrac As Double
+    Dim trigVol As Double
 
     On Error Resume Next
     Application.EnableEvents = False
@@ -183,32 +186,27 @@ Public Function LoadSettings(ByVal runId As String, ByVal site As String) As Boo
     ' Sample date
     ws.Range(Schema.NAME_SAMPLE_DATE).Value = ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_SAMPLE_DATE)
 
-    ' Enhanced mode: check if EnhMode has value to determine On/Off state
-    enhMode = ReadColIfExists(tbl, rowIdx, "EnhMode")
-    If Len(Trim$(CStr(enhMode & ""))) > 0 Then
-        ws.Range(Schema.NAME_ENHANCED_MODE).Value = "On"
-        ws.Range(Schema.NAME_MIXING_MODEL).Value = enhMode
-    Else
-        ws.Range(Schema.NAME_ENHANCED_MODE).Value = "Off"
+    ' EnhSettings: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+    enhSettingsStr = CStr(ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_ENH_SETTINGS) & "")
+    Helpers.DeserializeEnhSettingsHist enhSettingsStr, enabled, telemCal, rainfallMode, rainFactor, mixingModel, tau, surfaceFrac
+    ws.Range(Schema.NAME_ENHANCED_MODE).Value = IIf(Len(enabled) > 0, enabled, "Off")
+    If UCase$(enabled) = "ON" Then
+        ws.Range(Schema.NAME_TELEM_CAL).Value = telemCal
+        ws.Range(Schema.NAME_RAINFALL_MODE).Value = rainfallMode
+        ws.Range(Schema.NAME_RAIN_FACTOR).Value = rainFactor
+        ws.Range(Schema.NAME_MIXING_MODEL).Value = mixingModel
+        ws.Range(Schema.NAME_TAU).Value = tau
+        ws.Range(Schema.NAME_SURFACE_FRACTION).Value = surfaceFrac
     End If
 
-    ' Config settings
-    ws.Range(Schema.NAME_RAINFALL_MODE).Value = ReadColIfExists(tbl, rowIdx, "RainfallMode")
-    ws.Range(Schema.NAME_TELEM_CAL).Value = ReadColIfExists(tbl, rowIdx, "TelemCal")
-    ws.Range(Schema.NAME_TAU).Value = ReadColIfExists(tbl, rowIdx, "Tau")
-    ws.Range(Schema.NAME_SURFACE_FRACTION).Value = ReadColIfExists(tbl, rowIdx, "SurfaceFrac")
-    ws.Range(Schema.NAME_RAIN_FACTOR).Value = ReadColIfExists(tbl, rowIdx, "RainFactor")
-
-    ' Trigger volume
-    ws.Range(Schema.NAME_TRIGGER_VOL).Value = ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_TRIGGER_VOL)
+    ' Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+    Set limitRng = Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW)
+    Helpers.DeserializeTriggers CStr(ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_TRIGGERS) & ""), trigVol, limitRng
+    ws.Range(Schema.NAME_TRIGGER_VOL).Value = trigVol
 
     ' Reservoir chemistry
     Set chemRng = Helpers.GetRng(ws, Schema.NAME_RES_ROW)
     Helpers.DeserializeToRange CStr(ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_RES_CHEM) & ""), chemRng, Core.METRIC_COUNT
-
-    ' Trigger limits
-    Set limitRng = Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW)
-    Helpers.DeserializeToRange CStr(ReadColIfExists(tbl, rowIdx, Schema.HISTORY_COL_TRIGGER_CHEM) & ""), limitRng, Core.METRIC_COUNT
 
     ' Hidden mass
     Set hiddenRng = Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS)

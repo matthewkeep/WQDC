@@ -202,27 +202,24 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
 | 27 | ErrEC | SimLog.WriteDiscrepancy | - |
 | 28 | RunId | SimLog | - |
 
-### tblHistory_{site} (17 columns)
+### tblHistory_{site} (14 bundled columns)
 
-| Column | Written By | Read By |
-|--------|------------|---------|
-| RunId | History.RecordRun | History.LoadSettings |
-| Timestamp | History.RecordRun | - |
-| RunDate | History.RecordRun | History.RollbackTo |
-| Days | History.RecordRun | - |
-| RainfallMode | History.RecordRun | History.LoadSettings |
-| TelemCal | History.RecordRun | History.LoadSettings |
-| Tau | History.RecordRun | History.LoadSettings |
-| SurfaceFrac | History.RecordRun | History.LoadSettings |
-| RainFactor | History.RecordRun | History.LoadSettings |
-| StdMode | History.RecordRun | - |
-| StdTriggerDay | History.RecordRun | - |
-| StdTriggerMetric | History.RecordRun | - |
-| EnhMode | History.RecordRun | History.LoadSettings |
-| EnhTriggerDay | History.RecordRun | - |
-| EnhTriggerMetric | History.RecordRun | - |
-| Action | History.RecordRun | Events.OnHistoryDoubleClick |
-| Load | History.RecordRun | Events.OnHistoryDoubleClick |
+| Column | Format | Written By | Read By |
+|--------|--------|------------|---------|
+| RunId | `RP1_001` | History.RecordRun | History.LoadSettings |
+| Timestamp | datetime | History.RecordRun | - |
+| RunDate | date | History.RecordRun | History.RollbackTo |
+| SampleDate | date | History.RecordRun | History.LoadSettings |
+| ResChemistry | `EC\|F_U\|...\|TAN` | History.RecordRun | History.LoadSettings |
+| IRSnapshot | multi-line | History.RecordRun | History.LoadSettings |
+| Triggers | `Vol\|EC\|...\|TAN` | History.RecordRun | History.LoadSettings |
+| StdResult | `Days\|Metric` | History.RecordRun | - |
+| EnhResult | `Days\|Metric` | History.RecordRun | - |
+| EnhSettings | `Enabled\|TelemCal\|RainfallMode\|RainFactor\|MixingModel\|Tau\|SurfaceFrac` | History.RecordRun | History.LoadSettings |
+| HiddenMass | `EC\|F_U\|...\|TAN` | History.RecordRun | History.LoadSettings |
+| SignName | text | History.RecordRun | - |
+| Action | Current/Rollback | History.RecordRun | Events.OnHistoryDoubleClick |
+| Load | "Load" | History.RecordRun | Events.OnHistoryDoubleClick |
 
 ---
 
@@ -231,12 +228,8 @@ Public Sub SaveResult(ByRef r As Result, ByVal runType As String)
 ### RunId Format
 
 ```
-Base:    {site}-{yyyymmdd}-{seq}     e.g., RP1-20260115-001
-Full:    STD-{base} or ENH-{base}    e.g., STD-RP1-20260115-001
-
-Generated: WQOC.MakeRunId (line 126)
-Prefixed:  WQOC.Run (lines 55, 87)
-Parsed:    SimLog.WriteLog (line 16) - Left$(runId, 3)
+Format:    {site}_{seq}              e.g., RP1_001
+Generated: WQOC.MakeRunId (line 152)
 ```
 
 ### Date Handling

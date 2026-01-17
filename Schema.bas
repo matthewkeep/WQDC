@@ -57,7 +57,7 @@ Public Const TABLE_TELEMETRY As String = "tblTelemetry"
 Public Const TABLE_RESULTS As String = "tblResults"
 Public Const TABLE_INDEX As String = "tblIndex"
 Public Const TABLE_TRIGGERS As String = "tblTriggers"
-Public Const TABLE_SIGN As String = "tblSign"
+Public Const TABLE_USERS As String = "tblUsers"
 
 ' Per-site table prefixes (tables created on-demand)
 Public Const LIVE_TABLE_PREFIX As String = "tblLive_"
@@ -66,22 +66,15 @@ Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
 ' RR State table (per-site settings persistence)
 Public Const TABLE_RRSTATE As String = "tblRRState"
 
-' RRState table columns
+' RRState table columns (9 columns, bundled format)
 Public Const RRSTATE_COL_SITE As String = "Site"
 Public Const RRSTATE_COL_SAMPLE_DATE As String = "SampleDate"
-Public Const RRSTATE_COL_SIGN_NAME As String = "SignName"
-Public Const RRSTATE_COL_ENH_ENABLED As String = "EnhEnabled"
-Public Const RRSTATE_COL_TELEM_CAL As String = "TelemCal"
-Public Const RRSTATE_COL_RAINFALL_MODE As String = "RainfallMode"
-Public Const RRSTATE_COL_RAIN_FACTOR As String = "RainFactor"
-Public Const RRSTATE_COL_MIXING_MODEL As String = "MixingModel"
-Public Const RRSTATE_COL_TAU As String = "Tau"
-Public Const RRSTATE_COL_SURFACE_FRAC As String = "SurfaceFrac"
-Public Const RRSTATE_COL_TRIGGER_VOL As String = "TriggerVol"
 Public Const RRSTATE_COL_RES_CHEM As String = "ResChemistry"
-Public Const RRSTATE_COL_TRIG_CHEM As String = "TrigChemistry"
-Public Const RRSTATE_COL_HIDDEN_MASS As String = "HiddenMass"
 Public Const RRSTATE_COL_IR_SNAPSHOT As String = "IRSnapshot"
+Public Const RRSTATE_COL_TRIGGERS As String = "Triggers"
+Public Const RRSTATE_COL_ENH_SETTINGS As String = "EnhSettings"
+Public Const RRSTATE_COL_HIDDEN_MASS As String = "HiddenMass"
+Public Const RRSTATE_COL_SIGN_NAME As String = "SignName"
 Public Const RRSTATE_COL_LAST_MODIFIED As String = "LastModified"
 
 ' Live table columns (date-centric log with Std/Enh side-by-side)
@@ -104,21 +97,21 @@ Public Const IR_COL_ACTIVE As String = "Active"
 Public Const IR_COL_SAMPLE_DATE As String = "Sample Date"
 Public Const IR_COL_ACTION As String = "Add Input"
 
-' History table columns
+' History table columns (14 columns, bundled format)
 Public Const HISTORY_COL_RUNID As String = "RunId"
 Public Const HISTORY_COL_TIMESTAMP As String = "Timestamp"
 Public Const HISTORY_COL_RUNDATE As String = "RunDate"
-Public Const HISTORY_COL_DAYS As String = "Days"
+Public Const HISTORY_COL_SAMPLE_DATE As String = "SampleDate"
+Public Const HISTORY_COL_RES_CHEM As String = "ResChemistry"
+Public Const HISTORY_COL_IR_SNAPSHOT As String = "IRSnapshot"
+Public Const HISTORY_COL_TRIGGERS As String = "Triggers"
+Public Const HISTORY_COL_STD_RESULT As String = "StdResult"
+Public Const HISTORY_COL_ENH_RESULT As String = "EnhResult"
+Public Const HISTORY_COL_ENH_SETTINGS As String = "EnhSettings"
+Public Const HISTORY_COL_HIDDEN_MASS As String = "HiddenMass"
+Public Const HISTORY_COL_SIGN_NAME As String = "SignName"
 Public Const HISTORY_COL_ACTION As String = "Action"
 Public Const HISTORY_COL_LOAD As String = "Load"
-
-' History snapshot columns (for accurate rollback)
-Public Const HISTORY_COL_SAMPLE_DATE As String = "SampleDate"
-Public Const HISTORY_COL_TRIGGER_VOL As String = "TriggerVol"
-Public Const HISTORY_COL_RES_CHEM As String = "ResChemistry"
-Public Const HISTORY_COL_TRIGGER_CHEM As String = "TriggerChemistry"
-Public Const HISTORY_COL_HIDDEN_MASS As String = "HiddenMass"
-Public Const HISTORY_COL_IR_SNAPSHOT As String = "IRSnapshot"
 
 ' Telemetry columns (Date and Rain are fixed; EC/Vol are per-site)
 Public Const TELEM_COL_DATE As String = "Date"

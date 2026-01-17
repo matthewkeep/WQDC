@@ -4,16 +4,17 @@ Option Explicit
 '
 ' tblLive_{site}: One row per date with Std/Enh predictions side-by-side.
 ' Standard run creates/updates rows, Enhanced updates existing rows.
+' RunId stored without prefix (same as History table).
 ' Columns: Date, Days, StdVol, Std[7 chem], EnhVol, Enh[7 chem], EnhHid[7 chem], ErrVol, ErrEC, RunId
 
 ' ==== Write Functions =======================================================
 
-Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
+Public Sub WriteLog(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String, ByVal mode As String)
     ' UPSERT to site's live table - creates/updates rows by date
-    ' Detects Standard vs Enhanced from runId prefix (STD- or ENH-)
+    ' mode = "Standard" or "Enhanced"
     On Error GoTo Fail
 
-    If Left$(runId, 3) = "STD" Then
+    If mode = "Standard" Then
         WriteLiveStandard r, cfg, runId, site
     Else
         WriteLiveEnhanced r, cfg, runId, site
@@ -146,30 +147,22 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
 End Sub
 
 Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
-    ' Calculates ErrVol = TelemetryVol - PredictedVol (Enhanced if available, else Standard)
-    ' Calculates ErrEC = TelemetryEC - PredictedEC
-    ' Leaves blank if no telemetry for that date
-    Dim tblTelem As ListObject
-    Dim i As Long, rowIdx As Long
+    ' Calculates ErrVol/ErrEC = Telemetry - Predicted (Enhanced if available, else Standard)
+    ' Blank if no telemetry for date
+    Dim tblTelem As ListObject, i As Long, rowIdx As Long
     Dim logDate As Date, telemEC As Variant, telemVol As Variant
     Dim predEC As Double, predVol As Double
-    Dim ecCol As Long, volCol As Long
-    Dim errVolCol As Long, errECCol As Long
-    Dim enhVolCol As Long, enhECCol As Long
-    Dim stdVolCol As Long, stdECCol As Long
+    Dim ecCol As Long, volCol As Long, errVolCol As Long, errECCol As Long
+    Dim enhVolCol As Long, enhECCol As Long, stdVolCol As Long, stdECCol As Long
 
     If Not Helpers.HasData(tbl) Then Exit Sub
-
-    ' Get telemetry table
     Set tblTelem = Helpers.WithTableData(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
     If tblTelem Is Nothing Then Exit Sub
 
-    ' Get telemetry column indices for this site
     ecCol = Helpers.ColIdx(tblTelem, Helpers.TelemECColName(site))
     volCol = Helpers.ColIdx(tblTelem, Helpers.TelemVolColName(site))
-    If ecCol = 0 And volCol = 0 Then Exit Sub  ' No telemetry columns for this site
+    If ecCol = 0 And volCol = 0 Then Exit Sub
 
-    ' Get live table column indices
     errVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ERR_VOL)
     errECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ERR_EC)
     enhVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
@@ -177,42 +170,34 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
     stdVolCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
     stdECCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_EC)
 
-    ' Process each row in live table
     For i = 1 To tbl.ListRows.Count
         logDate = tbl.DataBodyRange.Cells(i, 1).Value
-
-        ' Find matching telemetry row
         rowIdx = Helpers.FindRowByDate(tblTelem, logDate)
+
         If rowIdx > 0 Then
-            ' Get telemetry values (may be empty)
             If ecCol > 0 Then telemEC = tblTelem.DataBodyRange.Cells(rowIdx, ecCol).Value
             If volCol > 0 Then telemVol = tblTelem.DataBodyRange.Cells(rowIdx, volCol).Value
 
-            ' Calculate EC discrepancy
+            ' EC error
             If errECCol > 0 And Not IsEmpty(telemEC) Then
-                ' Use Enhanced if available, else Standard
-                predEC = 0
                 If enhECCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, enhECCol).Value) Then
                     predEC = tbl.DataBodyRange.Cells(i, enhECCol).Value
-                ElseIf stdECCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, stdECCol).Value) Then
+                Else
                     predEC = tbl.DataBodyRange.Cells(i, stdECCol).Value
                 End If
                 tbl.DataBodyRange.Cells(i, errECCol).Value = CDbl(telemEC) - predEC
             End If
 
-            ' Calculate Volume discrepancy
+            ' Volume error
             If errVolCol > 0 And Not IsEmpty(telemVol) Then
-                ' Use Enhanced if available, else Standard
-                predVol = 0
                 If enhVolCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, enhVolCol).Value) Then
                     predVol = tbl.DataBodyRange.Cells(i, enhVolCol).Value
-                ElseIf stdVolCol > 0 And Not IsEmpty(tbl.DataBodyRange.Cells(i, stdVolCol).Value) Then
+                Else
                     predVol = tbl.DataBodyRange.Cells(i, stdVolCol).Value
                 End If
                 tbl.DataBodyRange.Cells(i, errVolCol).Value = CDbl(telemVol) - predVol
             End If
         Else
-            ' No telemetry for this date - clear discrepancy
             If errECCol > 0 Then tbl.DataBodyRange.Cells(i, errECCol).ClearContents
             If errVolCol > 0 Then tbl.DataBodyRange.Cells(i, errVolCol).ClearContents
         End If

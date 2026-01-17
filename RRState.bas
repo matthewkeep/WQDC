@@ -5,9 +5,9 @@ Option Explicit
 ' ==== Public Entry Points ===================================================
 
 Public Sub Save(ByVal site As String)
-    ' Saves current Inputs sheet state to tblRRState for site
+    ' Saves current Inputs sheet state to tblRRState for site (9 bundled columns)
     Dim ws As Worksheet, tbl As ListObject, row As ListRow
-    Dim n As Long
+    Dim n As Long, trigVol As Double
 
     On Error GoTo Fail
     If Len(Trim$(site)) = 0 Then Exit Sub
@@ -24,34 +24,12 @@ Public Sub Save(ByVal site As String)
     With row.Range
         .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SAMPLE_DATE)).Value = _
             Helpers.GetDateVal(ws, Schema.NAME_SAMPLE_DATE)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SIGN_NAME)).Value = _
-            Helpers.ReadFromRange(ws, Schema.NAME_SIGN_OFF_NAME)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_ENH_ENABLED)).Value = _
-            Helpers.ReadFromRange(ws, Schema.NAME_ENHANCED_MODE)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TELEM_CAL)).Value = _
-            Helpers.ReadFromRange(ws, Schema.NAME_TELEM_CAL)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RAINFALL_MODE)).Value = _
-            Helpers.ReadFromRange(ws, Schema.NAME_RAINFALL_MODE)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RAIN_FACTOR)).Value = _
-            Val(Helpers.ReadFromRange(ws, Schema.NAME_RAIN_FACTOR))
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_MIXING_MODEL)).Value = _
-            Helpers.ReadFromRange(ws, Schema.NAME_MIXING_MODEL)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TAU)).Value = _
-            Val(Helpers.ReadFromRange(ws, Schema.NAME_TAU))
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SURFACE_FRAC)).Value = _
-            Val(Helpers.ReadFromRange(ws, Schema.NAME_SURFACE_FRACTION))
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIGGER_VOL)).Value = _
-            Val(Helpers.ReadFromRange(ws, Schema.NAME_TRIGGER_VOL))
 
-        ' Serialize chemistry ranges
+        ' ResChemistry
         .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RES_CHEM)).Value = _
             Helpers.SerializeRange(Helpers.GetRng(ws, Schema.NAME_RES_ROW), n)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIG_CHEM)).Value = _
-            Helpers.SerializeRange(Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW), n)
-        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_HIDDEN_MASS)).Value = _
-            Helpers.SerializeColumn(Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS), n)
 
-        ' Serialize IR table
+        ' IR table snapshot
         Dim tblIR As ListObject
         Set tblIR = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
         If Not tblIR Is Nothing Then
@@ -59,8 +37,28 @@ Public Sub Save(ByVal site As String)
                 Helpers.SerializeIRTable(tblIR)
         End If
 
+        ' Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+        trigVol = Val(Helpers.ReadFromRange(ws, Schema.NAME_TRIGGER_VOL))
+        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIGGERS)).Value = _
+            Helpers.SerializeTriggers(trigVol, Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW))
+
+        ' EnhSettings: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_ENH_SETTINGS)).Value = _
+            Helpers.SerializeEnhSettingsState(ws)
+
+        ' HiddenMass
+        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_HIDDEN_MASS)).Value = _
+            Helpers.SerializeColumn(Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS), n)
+
+        ' SignName
+        .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SIGN_NAME)).Value = _
+            Helpers.ReadFromRange(ws, Schema.NAME_SIGN_OFF_NAME)
+
         .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_LAST_MODIFIED)).Value = Now
     End With
+
+    ' Prevent wrap text (IRSnapshot contains newlines)
+    row.Range.WrapText = False
     Exit Sub
 Fail:
     Error.TraceErr "RRState.Save"
@@ -68,10 +66,10 @@ End Sub
 
 Public Function Load(ByVal site As String) As Boolean
     ' Loads saved state from tblRRState to Inputs sheet (if exists)
-    ' Returns True if state was loaded
+    ' Returns True if state was loaded (9 bundled columns)
     Dim ws As Worksheet, tbl As ListObject, row As ListRow
     Dim n As Long, rowIdx As Long
-    Dim sampleDate As Variant
+    Dim sampleDate As Variant, trigVol As Double
     Dim irSnapshot As String, tblIR As ListObject
 
     If Len(Trim$(site)) = 0 Then Exit Function
@@ -92,42 +90,18 @@ Public Function Load(ByVal site As String) As Boolean
 
     ' Restore settings to Inputs sheet
     With row.Range
+        ' SampleDate
         sampleDate = .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SAMPLE_DATE)).Value
         If IsDate(sampleDate) And sampleDate > 0 Then
             Helpers.WriteToRange ws, Schema.NAME_SAMPLE_DATE, sampleDate
         End If
 
-        Helpers.WriteToRange ws, Schema.NAME_SIGN_OFF_NAME, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SIGN_NAME)).Value
-        Helpers.WriteToRange ws, Schema.NAME_ENHANCED_MODE, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_ENH_ENABLED)).Value
-        Helpers.WriteToRange ws, Schema.NAME_TELEM_CAL, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TELEM_CAL)).Value
-        Helpers.WriteToRange ws, Schema.NAME_RAINFALL_MODE, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RAINFALL_MODE)).Value
-        Helpers.WriteToRange ws, Schema.NAME_RAIN_FACTOR, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RAIN_FACTOR)).Value
-        Helpers.WriteToRange ws, Schema.NAME_MIXING_MODEL, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_MIXING_MODEL)).Value
-        Helpers.WriteToRange ws, Schema.NAME_TAU, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TAU)).Value
-        Helpers.WriteToRange ws, Schema.NAME_SURFACE_FRACTION, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SURFACE_FRAC)).Value
-        Helpers.WriteToRange ws, Schema.NAME_TRIGGER_VOL, _
-            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIGGER_VOL)).Value
-
-        ' Deserialize chemistry ranges
+        ' ResChemistry
         Helpers.DeserializeToRange _
             CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_RES_CHEM)).Value), _
             Helpers.GetRng(ws, Schema.NAME_RES_ROW), n
-        Helpers.DeserializeToRange _
-            CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIG_CHEM)).Value), _
-            Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW), n
-        Helpers.DeserializeToColumn _
-            CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_HIDDEN_MASS)).Value), _
-            Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS), n
 
-        ' Deserialize IR table
+        ' IR table
         irSnapshot = CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_IR_SNAPSHOT)).Value)
         If Len(irSnapshot) > 0 Then
             Set tblIR = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
@@ -136,6 +110,25 @@ Public Function Load(ByVal site As String) As Boolean
                 Setup.ApplyIRActiveConditionalFormat tblIR
             End If
         End If
+
+        ' Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+        Helpers.DeserializeTriggers _
+            CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_TRIGGERS)).Value), _
+            trigVol, Helpers.GetRng(ws, Schema.NAME_LIMIT_ROW)
+        Helpers.WriteToRange ws, Schema.NAME_TRIGGER_VOL, trigVol
+
+        ' EnhSettings: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+        Helpers.DeserializeEnhSettingsState _
+            CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_ENH_SETTINGS)).Value), ws
+
+        ' HiddenMass
+        Helpers.DeserializeToColumn _
+            CStr(.Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_HIDDEN_MASS)).Value), _
+            Helpers.GetRng(ws, Schema.NAME_HIDDEN_MASS), n
+
+        ' SignName
+        Helpers.WriteToRange ws, Schema.NAME_SIGN_OFF_NAME, _
+            .Cells(1, Helpers.ColIdx(tbl, Schema.RRSTATE_COL_SIGN_NAME)).Value
     End With
 
     Application.EnableEvents = True

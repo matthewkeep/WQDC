@@ -276,7 +276,7 @@ Private Sub SetupInput()
     AddNm Schema.NAME_SIGN_OFF_NAME, ws.Range("O8")
     SetIfEmpty ws.Range("N9"), "Signed"
     SetIfEmpty ws.Range("N10"), "Position"
-    SetLookupFormula ws.Range("O10"), "=IFERROR(VLOOKUP(" & Schema.NAME_SIGN_OFF_NAME & "," & Schema.TABLE_SIGN & ",2,FALSE),"""")"
+    SetLookupFormula ws.Range("O10"), "=IFERROR(VLOOKUP(" & Schema.NAME_SIGN_OFF_NAME & "," & Schema.TABLE_USERS & ",2,FALSE),"""")"
 
     ' --- Enhanced Block (R1:S16) ---
     SetIfEmpty ws.Range("R1"), "ENHANCED"
@@ -340,13 +340,13 @@ Private Sub SetupConfig()
     MakeTbl ws, ws.Range("E2"), Schema.TABLE_TRIGGERS, h
 
     ws.Range("O1") = "USERS": ws.Range("O1").Font.Bold = True
-    MakeTbl ws, ws.Range("O2"), Schema.TABLE_SIGN, Array("Name", "Position")
+    MakeTbl ws, ws.Range("O2"), Schema.TABLE_USERS, Array("Name", "Position")
 
     CreateRRStateTable ws
 End Sub
 
 Private Sub CreateRRStateTable(ByVal ws As Worksheet)
-    ' Creates tblRRState for per-site settings persistence
+    ' Creates tblRRState for per-site settings persistence (9 bundled columns)
     Dim tbl As ListObject
 
     On Error Resume Next
@@ -357,19 +357,16 @@ Private Sub CreateRRStateTable(ByVal ws As Worksheet)
     ws.Range("R1") = "RR STATE": ws.Range("R1").Font.Bold = True
     MakeTbl ws, ws.Range("R2"), Schema.TABLE_RRSTATE, _
         Array(Schema.RRSTATE_COL_SITE, Schema.RRSTATE_COL_SAMPLE_DATE, _
-              Schema.RRSTATE_COL_SIGN_NAME, Schema.RRSTATE_COL_ENH_ENABLED, _
-              Schema.RRSTATE_COL_TELEM_CAL, Schema.RRSTATE_COL_RAINFALL_MODE, _
-              Schema.RRSTATE_COL_RAIN_FACTOR, Schema.RRSTATE_COL_MIXING_MODEL, _
-              Schema.RRSTATE_COL_TAU, Schema.RRSTATE_COL_SURFACE_FRAC, _
-              Schema.RRSTATE_COL_TRIGGER_VOL, Schema.RRSTATE_COL_RES_CHEM, _
-              Schema.RRSTATE_COL_TRIG_CHEM, Schema.RRSTATE_COL_HIDDEN_MASS, _
-              Schema.RRSTATE_COL_IR_SNAPSHOT, Schema.RRSTATE_COL_LAST_MODIFIED)
+              Schema.RRSTATE_COL_RES_CHEM, Schema.RRSTATE_COL_IR_SNAPSHOT, _
+              Schema.RRSTATE_COL_TRIGGERS, Schema.RRSTATE_COL_ENH_SETTINGS, _
+              Schema.RRSTATE_COL_HIDDEN_MASS, Schema.RRSTATE_COL_SIGN_NAME, _
+              Schema.RRSTATE_COL_LAST_MODIFIED)
 
-    ' Format date columns
+    ' Format date columns (col 2 = SampleDate, col 9 = LastModified)
     Set tbl = ws.ListObjects(Schema.TABLE_RRSTATE)
     If Not tbl Is Nothing Then
-        tbl.ListColumns(Schema.RRSTATE_COL_SAMPLE_DATE).Range.NumberFormat = "d/mm/yy"
-        tbl.ListColumns(Schema.RRSTATE_COL_LAST_MODIFIED).Range.NumberFormat = "d/mm/yy hh:mm"
+        tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy"
+        tbl.ListColumns(9).Range.NumberFormat = "d/mm/yy hh:mm"
         tbl.Range.WrapText = False
     End If
 End Sub
@@ -460,7 +457,7 @@ Private Sub SeedConfig()
     End If
 
     ' Users (sign-off dropdown)
-    Set tbl = ws.ListObjects(Schema.TABLE_SIGN)
+    Set tbl = ws.ListObjects(Schema.TABLE_USERS)
     If Not tbl Is Nothing Then
         If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
         EnsureRows tbl, 3
@@ -499,14 +496,12 @@ Private Sub SeedResults()
 End Sub
 
 Private Sub SeedTelemetry()
-    ' Seeds 14 days of sample telemetry data (rain only - EC/Vol are per-site)
-    ' Run Initialize after SeedConfig to add site-specific columns
+    ' Seeds 14 days of telemetry: rain (global) + EC/Vol (per-site)
     Dim ws As Worksheet, tbl As ListObject, d As Date, i As Long
-    Dim rain As Variant
+    Dim rain As Variant, sites As Variant, site As Variant
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
     Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
     d = Date - 14
-    ' Rain data (mm) - all days have data
     rain = Array(0, 2.5, 0, 8.3, 1.2, 0, 0, 5.6, 3.1, 0, 12.4, 4.2, 0.8, 0)
 
     If Not tbl Is Nothing Then
@@ -515,6 +510,14 @@ Private Sub SeedTelemetry()
             tbl.DataBodyRange.Cells(i + 1, 1) = d + i
             tbl.DataBodyRange.Cells(i + 1, 2) = rain(i)
         Next i
+    End If
+
+    ' Seed EC/Vol for all sites that have columns
+    sites = GetAllSites()
+    If IsArray(sites) Then
+        For Each site In sites
+            SeedSiteTelemetry CStr(site)
+        Next site
     End If
 End Sub
 
@@ -824,7 +827,17 @@ End Sub
 Private Sub SetupChart()
     Dim ws As Worksheet
     Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CHART)
+    ClearCharts ws
     ws.Range("A1") = "SIMULATION CHARTS": ws.Range("A1").Font.Bold = True
+End Sub
+
+Private Sub ClearCharts(ByVal ws As Worksheet)
+    ' Deletes all charts on the Chart sheet (cht_* naming convention)
+    Dim cht As ChartObject
+    If ws Is Nothing Then Exit Sub
+    For Each cht In ws.ChartObjects
+        cht.Delete
+    Next cht
 End Sub
 
 ' ==== Log Sheet ===============================================================
@@ -844,13 +857,14 @@ Private Sub SetupHistory()
 End Sub
 
 Private Sub ClearPerSiteTables()
-    ' Clears all tblLive_* and tblHistory_* tables
-    Dim wsLog As Worksheet, wsHist As Worksheet
+    ' Clears all tblLive_*, tblHistory_*, and tblRRState tables
+    Dim wsLog As Worksheet, wsHist As Worksheet, wsConfig As Worksheet
     Dim tbl As ListObject
 
     On Error Resume Next
     Set wsLog = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
     Set wsHist = ThisWorkbook.Worksheets(Schema.SHEET_RECORD)
+    Set wsConfig = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
     On Error GoTo 0
 
     ' Clear Live tables
@@ -870,12 +884,23 @@ Private Sub ClearPerSiteTables()
             End If
         Next tbl
     End If
+
+    ' Clear RRState table
+    If Not wsConfig Is Nothing Then
+        Set tbl = Nothing
+        On Error Resume Next
+        Set tbl = wsConfig.ListObjects(Schema.TABLE_RRSTATE)
+        On Error GoTo 0
+        If Not tbl Is Nothing Then
+            If Not tbl.DataBodyRange Is Nothing Then tbl.DataBodyRange.Delete
+        End If
+    End If
 End Sub
 
 ' ==== Per-Site Table Creation (called on-demand) =============================
 
 Public Sub EnsureSiteHistoryTable(ByVal site As String)
-    ' Creates history table for site if it doesn't exist
+    ' Creates history table for site if it doesn't exist (14 bundled columns)
     Dim ws As Worksheet, tbl As ListObject, tblName As String
     Dim startCol As Long
 
@@ -892,24 +917,22 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     startCol = FindNextTableColumn(ws)
 
     ' Create table (no Site column - site is in table name)
-    ' Single row per run with both Std and Enh results (Enh columns blank if disabled)
-    ' Includes snapshot columns for accurate rollback
+    ' Single row per run with bundled Std/Enh results (Enh columns blank if disabled)
     MakeTbl ws, ws.Cells(2, startCol), tblName, _
-        Array("RunId", "Timestamp", "RunDate", "Days", _
-              "RainfallMode", "TelemCal", "Tau", "SurfaceFrac", "RainFactor", _
-              "StdMode", "StdTriggerDay", "StdTriggerMetric", _
-              "EnhMode", "EnhTriggerDay", "EnhTriggerMetric", _
-              Schema.HISTORY_COL_SAMPLE_DATE, Schema.HISTORY_COL_TRIGGER_VOL, _
-              Schema.HISTORY_COL_RES_CHEM, Schema.HISTORY_COL_TRIGGER_CHEM, _
-              Schema.HISTORY_COL_HIDDEN_MASS, Schema.HISTORY_COL_IR_SNAPSHOT, _
+        Array(Schema.HISTORY_COL_RUNID, Schema.HISTORY_COL_TIMESTAMP, _
+              Schema.HISTORY_COL_RUNDATE, Schema.HISTORY_COL_SAMPLE_DATE, _
+              Schema.HISTORY_COL_RES_CHEM, Schema.HISTORY_COL_IR_SNAPSHOT, _
+              Schema.HISTORY_COL_TRIGGERS, Schema.HISTORY_COL_STD_RESULT, _
+              Schema.HISTORY_COL_ENH_RESULT, Schema.HISTORY_COL_ENH_SETTINGS, _
+              Schema.HISTORY_COL_HIDDEN_MASS, Schema.HISTORY_COL_SIGN_NAME, _
               Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
 
-    ' Format table
+    ' Format table (col 2 = Timestamp, col 3 = RunDate, col 4 = SampleDate)
     Set tbl = ws.ListObjects(tblName)
     If Not tbl Is Nothing Then
         tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy hh:mm"  ' Timestamp
         tbl.ListColumns(3).Range.NumberFormat = "d/mm/yy"         ' RunDate
-        tbl.ListColumns(16).Range.NumberFormat = "d/mm/yy"        ' SampleDate
+        tbl.ListColumns(4).Range.NumberFormat = "d/mm/yy"         ' SampleDate
         tbl.Range.WrapText = False
     End If
 End Sub
@@ -1109,7 +1132,7 @@ Private Sub ApplyTableValidations(ByVal ws As Worksheet)
     ' Table-based dropdowns (requires Seed to populate tables first)
     ApplyTableDropdown ws, Schema.NAME_SITE, Schema.TABLE_INDEX, "RR"
     ApplyTableDropdown ws, Schema.NAME_TRIGGER_PRESET, Schema.TABLE_TRIGGERS, "Preset"
-    ApplyTableDropdown ws, Schema.NAME_SIGN_OFF_NAME, Schema.TABLE_SIGN, "Name"
+    ApplyTableDropdown ws, Schema.NAME_SIGN_OFF_NAME, Schema.TABLE_USERS, "Name"
 End Sub
 
 Private Sub ApplyGreyoutFormat(ByVal targetRange As Range, ByVal formula As String)

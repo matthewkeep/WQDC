@@ -416,11 +416,16 @@ Public Sub RefreshPredictedRow(ByVal mode As String)
 End Sub
 
 Private Function GetTriggerMetricFromHistory(ByVal site As String, ByVal isEnhanced As Boolean) As String
-    ' Reads trigger metric from most recent history entry
+    ' Reads trigger metric from most recent history entry (bundled in StdResult/EnhResult)
     Dim tbl As ListObject, col As Long, colName As String
+    Dim resultStr As String, day As Long, metric As String
     Set tbl = Helpers.GetTable(Schema.SHEET_RECORD, Helpers.HistoryTableName(site))
     If Not Helpers.HasData(tbl) Then Exit Function
-    colName = IIf(isEnhanced, "EnhTriggerMetric", "StdTriggerMetric")
+    colName = IIf(isEnhanced, Schema.HISTORY_COL_ENH_RESULT, Schema.HISTORY_COL_STD_RESULT)
     col = Helpers.ColIdx(tbl, colName)
-    If col > 0 Then GetTriggerMetricFromHistory = tbl.DataBodyRange.Cells(tbl.ListRows.Count, col).Value
+    If col > 0 Then
+        resultStr = CStr(tbl.DataBodyRange.Cells(tbl.ListRows.Count, col).Value & "")
+        Helpers.DeserializeResult resultStr, day, metric
+        GetTriggerMetricFromHistory = metric
+    End If
 End Function

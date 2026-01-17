@@ -254,3 +254,106 @@ Public Sub DeserializeIRTable(ByVal str As String, ByVal tbl As ListObject)
         End If
     Next i
 End Sub
+
+' ==== Bundled Column Serialization ==============================================
+
+Public Function SerializeTriggers(ByVal vol As Double, ByVal chemRng As Range) As String
+    ' Serializes Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN (8 values)
+    Dim i As Long, parts(0 To 7) As String
+    parts(0) = CStr(vol)
+    If Not chemRng Is Nothing Then
+        For i = 1 To Core.METRIC_COUNT
+            parts(i) = CStr(Val(chemRng.Cells(1, i).Value))
+        Next i
+    End If
+    SerializeTriggers = Join(parts, "|")
+End Function
+
+Public Sub DeserializeTriggers(ByVal str As String, ByRef vol As Double, ByVal chemRng As Range)
+    ' Deserializes Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+    Dim parts() As String, i As Long
+    If Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    If UBound(parts) >= 0 Then vol = Val(parts(0))
+    If Not chemRng Is Nothing Then
+        For i = 1 To Core.METRIC_COUNT
+            If UBound(parts) >= i Then chemRng.Cells(1, i).Value = Val(parts(i))
+        Next i
+    End If
+End Sub
+
+Public Function SerializeResult(ByVal day As Long, ByVal metric As String) As String
+    ' Serializes StdResult/EnhResult: Days|TriggerMetric (Days = days from run date)
+    SerializeResult = CStr(day) & "|" & metric
+End Function
+
+Public Sub DeserializeResult(ByVal str As String, ByRef day As Long, ByRef metric As String)
+    ' Deserializes StdResult/EnhResult: Days|TriggerMetric
+    Dim parts() As String
+    day = 0: metric = ""
+    If Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    If UBound(parts) >= 0 Then day = CLng(Val(parts(0)))
+    If UBound(parts) >= 1 Then metric = parts(1)
+End Sub
+
+Public Function SerializeEnhSettingsHist(ByVal enabled As String, ByVal telemCal As String, _
+    ByVal rainfallMode As String, ByVal rainFactor As Double, ByVal mixingModel As String, _
+    ByVal tau As Double, ByVal surfaceFrac As Double) As String
+    ' Serializes EnhSettings for History: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+    ' Same 7-field format as RRState for consistency
+    Dim parts(0 To 6) As String
+    parts(0) = enabled
+    parts(1) = telemCal
+    parts(2) = rainfallMode
+    parts(3) = CStr(rainFactor)
+    parts(4) = mixingModel
+    parts(5) = CStr(tau)
+    parts(6) = CStr(surfaceFrac)
+    SerializeEnhSettingsHist = Join(parts, "|")
+End Function
+
+Public Sub DeserializeEnhSettingsHist(ByVal str As String, ByRef enabled As String, _
+    ByRef telemCal As String, ByRef rainfallMode As String, ByRef rainFactor As Double, _
+    ByRef mixingModel As String, ByRef tau As Double, ByRef surfaceFrac As Double)
+    ' Deserializes EnhSettings for History: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+    ' Same 7-field format as RRState for consistency
+    Dim parts() As String
+    enabled = "": telemCal = "": rainfallMode = "": rainFactor = 0: mixingModel = "": tau = 0: surfaceFrac = 0
+    If Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    If UBound(parts) >= 0 Then enabled = parts(0)
+    If UBound(parts) >= 1 Then telemCal = parts(1)
+    If UBound(parts) >= 2 Then rainfallMode = parts(2)
+    If UBound(parts) >= 3 Then rainFactor = Val(parts(3))
+    If UBound(parts) >= 4 Then mixingModel = parts(4)
+    If UBound(parts) >= 5 Then tau = Val(parts(5))
+    If UBound(parts) >= 6 Then surfaceFrac = Val(parts(6))
+End Sub
+
+Public Function SerializeEnhSettingsState(ByVal ws As Worksheet) As String
+    ' Serializes EnhSettings for RRState: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+    Dim parts(0 To 6) As String
+    parts(0) = CStr(ReadFromRange(ws, Schema.NAME_ENHANCED_MODE) & "")
+    parts(1) = CStr(ReadFromRange(ws, Schema.NAME_TELEM_CAL) & "")
+    parts(2) = CStr(ReadFromRange(ws, Schema.NAME_RAINFALL_MODE) & "")
+    parts(3) = CStr(Val(ReadFromRange(ws, Schema.NAME_RAIN_FACTOR)))
+    parts(4) = CStr(ReadFromRange(ws, Schema.NAME_MIXING_MODEL) & "")
+    parts(5) = CStr(Val(ReadFromRange(ws, Schema.NAME_TAU)))
+    parts(6) = CStr(Val(ReadFromRange(ws, Schema.NAME_SURFACE_FRACTION)))
+    SerializeEnhSettingsState = Join(parts, "|")
+End Function
+
+Public Sub DeserializeEnhSettingsState(ByVal str As String, ByVal ws As Worksheet)
+    ' Deserializes EnhSettings for RRState: Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac
+    Dim parts() As String
+    If Len(str) = 0 Then Exit Sub
+    parts = Split(str, "|")
+    If UBound(parts) >= 0 Then WriteToRange ws, Schema.NAME_ENHANCED_MODE, parts(0)
+    If UBound(parts) >= 1 Then WriteToRange ws, Schema.NAME_TELEM_CAL, parts(1)
+    If UBound(parts) >= 2 Then WriteToRange ws, Schema.NAME_RAINFALL_MODE, parts(2)
+    If UBound(parts) >= 3 Then WriteToRange ws, Schema.NAME_RAIN_FACTOR, Val(parts(3))
+    If UBound(parts) >= 4 Then WriteToRange ws, Schema.NAME_MIXING_MODEL, parts(4)
+    If UBound(parts) >= 5 Then WriteToRange ws, Schema.NAME_TAU, Val(parts(5))
+    If UBound(parts) >= 6 Then WriteToRange ws, Schema.NAME_SURFACE_FRACTION, Val(parts(6))
+End Sub
