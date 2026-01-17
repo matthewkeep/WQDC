@@ -223,7 +223,8 @@ End Sub
 
 Private Sub ClearTriggerFormatting(ByVal tbl As ListObject, ByVal prefix As String)
     ' Clears red+bold trigger formatting from Vol + chemistry columns for Std or Enh
-    Dim j As Long
+    ' Also clears row box borders
+    Dim j As Long, i As Long
     If Not Helpers.HasData(tbl) Then Exit Sub
 
     ClearColumnFormat tbl, IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
@@ -234,6 +235,21 @@ Private Sub ClearTriggerFormatting(ByVal tbl As ListObject, ByVal prefix As Stri
             ClearColumnFormat tbl, Schema.EnhChemColName(j)
         End If
     Next j
+
+    ' Clear row box borders (only on first pass - Std)
+    If prefix = "Std" Then
+        For i = 1 To tbl.ListRows.Count
+            ClearRowBorder tbl.ListRows(i).Range
+        Next i
+    End If
+End Sub
+
+Private Sub ClearRowBorder(ByVal rng As Range)
+    ' Clears outer border edges only (preserves table internal formatting)
+    rng.Borders(xlEdgeTop).LineStyle = xlNone
+    rng.Borders(xlEdgeBottom).LineStyle = xlNone
+    rng.Borders(xlEdgeLeft).LineStyle = xlNone
+    rng.Borders(xlEdgeRight).LineStyle = xlNone
 End Sub
 
 Private Sub ClearColumnFormat(ByVal tbl As ListObject, ByVal colName As String)
@@ -267,7 +283,7 @@ End Sub
 
 Private Sub FormatLiveTriggerCell(ByVal tbl As ListObject, ByVal triggerDate As Date, _
                                    ByVal metricName As String, ByVal prefix As String)
-    ' Formats the triggered metric cell red + bold in tblLive
+    ' Formats the triggered metric cell red + bold and boxes the row
     Dim rowIdx As Long, colName As String, col As Long
 
     rowIdx = Helpers.FindRowByDate(tbl, triggerDate)
@@ -287,6 +303,9 @@ Private Sub FormatLiveTriggerCell(ByVal tbl As ListObject, ByVal triggerDate As 
             .Font.Color = Schema.COLOR_TRIGGER_FONT
         End With
     End If
+
+    ' Box the trigger row (outer border only)
+    tbl.ListRows(rowIdx).Range.BorderAround xlContinuous, xlThin
 End Sub
 
 ' ==== Row Lookup/Creation ===================================================
