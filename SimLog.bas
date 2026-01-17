@@ -38,6 +38,9 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
     runDate = Date  ' Today's date for row shading
     If tbl Is Nothing Then Exit Sub
 
+    ' Clear old trigger formatting before writing new data
+    ClearTriggerFormatting tbl, "Std"
+
     ' Pre-fetch all column indices (avoids O(n*7) lookups in loop)
     daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
     volCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_STD_VOL)
@@ -92,6 +95,9 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
     If tbl Is Nothing Then Exit Sub
 
     runDate = Date  ' Run date is always today
+
+    ' Clear old trigger formatting before writing new data
+    ClearTriggerFormatting tbl, "Enh"
 
     ' Pre-fetch all column indices (avoids O(n*14) lookups in loop)
     daysCol = Helpers.ColIdx(tbl, Schema.LIVE_COL_DAYS)
@@ -214,6 +220,33 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
 End Sub
 
 ' ==== Formatting Helpers ====================================================
+
+Private Sub ClearTriggerFormatting(ByVal tbl As ListObject, ByVal prefix As String)
+    ' Clears red+bold trigger formatting from Vol + chemistry columns for Std or Enh
+    Dim j As Long
+    If Not Helpers.HasData(tbl) Then Exit Sub
+
+    ClearColumnFormat tbl, IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
+    For j = 1 To Core.METRIC_COUNT
+        If prefix = "Std" Then
+            ClearColumnFormat tbl, Schema.StdChemColName(j)
+        Else
+            ClearColumnFormat tbl, Schema.EnhChemColName(j)
+        End If
+    Next j
+End Sub
+
+Private Sub ClearColumnFormat(ByVal tbl As ListObject, ByVal colName As String)
+    ' Clears font formatting (bold + color) from a table column
+    Dim col As Long
+    col = Helpers.ColIdx(tbl, colName)
+    If col > 0 Then
+        With tbl.DataBodyRange.Columns(col).Font
+            .Bold = False
+            .ColorIndex = xlAutomatic
+        End With
+    End If
+End Sub
 
 Private Sub ApplyRowShading(ByVal tbl As ListObject, ByVal sampleDate As Date, ByVal runDate As Date)
     ' Applies background color to sample date and run date rows

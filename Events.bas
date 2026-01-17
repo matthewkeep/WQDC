@@ -1,6 +1,9 @@
 Option Explicit
 ' Events: Worksheet event handlers.
-' Dependencies: Loader, Schema, WQOC, History, Data
+' Dependencies: Loader, Schema, WQOC, History, Data, RRState
+
+' Module-level state for site change tracking
+Private mPrevSite As String
 '
 ' NOTE: To enable events, add this code to each sheet module
 ' (right-click sheet tab > View Code):
@@ -32,7 +35,8 @@ Public Sub OnInputsChange(ByVal Target As Range)
 
     ' Site change
     If MatchesRange(Target, Schema.NAME_SITE) And Len(v) > 0 Then
-        Loader.LoadSiteData v
+        HandleSiteChange mPrevSite, v
+        mPrevSite = v
         Exit Sub
     End If
 
@@ -49,6 +53,21 @@ Public Sub OnInputsChange(ByVal Target As Range)
     If MatchesRange(Target, Schema.NAME_TRIGGER_PRESET) And Len(v) > 0 Then
         Loader.LoadTriggerPreset v
         Exit Sub
+    End If
+End Sub
+
+Private Sub HandleSiteChange(ByVal oldSite As String, ByVal newSite As String)
+    ' Saves old site state, restores new site state (or loads fresh if first visit)
+    ' Called when RR_Site dropdown changes
+
+    ' Save outgoing site state (if we have a previous site)
+    If Len(Trim$(oldSite)) > 0 Then
+        RRState.Save oldSite
+    End If
+
+    ' Try to restore saved state; if none exists, load fresh from catalog
+    If Not RRState.Load(newSite) Then
+        Loader.LoadSiteData newSite
     End If
 End Sub
 

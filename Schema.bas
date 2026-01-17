@@ -63,6 +63,27 @@ Public Const TABLE_SIGN As String = "tblSign"
 Public Const LIVE_TABLE_PREFIX As String = "tblLive_"
 Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
 
+' RR State table (per-site settings persistence)
+Public Const TABLE_RRSTATE As String = "tblRRState"
+
+' RRState table columns
+Public Const RRSTATE_COL_SITE As String = "Site"
+Public Const RRSTATE_COL_SAMPLE_DATE As String = "SampleDate"
+Public Const RRSTATE_COL_SIGN_NAME As String = "SignName"
+Public Const RRSTATE_COL_ENH_ENABLED As String = "EnhEnabled"
+Public Const RRSTATE_COL_TELEM_CAL As String = "TelemCal"
+Public Const RRSTATE_COL_RAINFALL_MODE As String = "RainfallMode"
+Public Const RRSTATE_COL_RAIN_FACTOR As String = "RainFactor"
+Public Const RRSTATE_COL_MIXING_MODEL As String = "MixingModel"
+Public Const RRSTATE_COL_TAU As String = "Tau"
+Public Const RRSTATE_COL_SURFACE_FRAC As String = "SurfaceFrac"
+Public Const RRSTATE_COL_TRIGGER_VOL As String = "TriggerVol"
+Public Const RRSTATE_COL_RES_CHEM As String = "ResChemistry"
+Public Const RRSTATE_COL_TRIG_CHEM As String = "TrigChemistry"
+Public Const RRSTATE_COL_HIDDEN_MASS As String = "HiddenMass"
+Public Const RRSTATE_COL_IR_SNAPSHOT As String = "IRSnapshot"
+Public Const RRSTATE_COL_LAST_MODIFIED As String = "LastModified"
+
 ' Live table columns (date-centric log with Std/Enh side-by-side)
 Public Const LIVE_COL_DATE As String = "Date"
 Public Const LIVE_COL_DAYS As String = "Days"

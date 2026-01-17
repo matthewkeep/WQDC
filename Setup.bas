@@ -341,6 +341,37 @@ Private Sub SetupConfig()
 
     ws.Range("O1") = "USERS": ws.Range("O1").Font.Bold = True
     MakeTbl ws, ws.Range("O2"), Schema.TABLE_SIGN, Array("Name", "Position")
+
+    CreateRRStateTable ws
+End Sub
+
+Private Sub CreateRRStateTable(ByVal ws As Worksheet)
+    ' Creates tblRRState for per-site settings persistence
+    Dim tbl As ListObject
+
+    On Error Resume Next
+    Set tbl = ws.ListObjects(Schema.TABLE_RRSTATE)
+    On Error GoTo 0
+    If Not tbl Is Nothing Then Exit Sub  ' Already exists
+
+    ws.Range("R1") = "RR STATE": ws.Range("R1").Font.Bold = True
+    MakeTbl ws, ws.Range("R2"), Schema.TABLE_RRSTATE, _
+        Array(Schema.RRSTATE_COL_SITE, Schema.RRSTATE_COL_SAMPLE_DATE, _
+              Schema.RRSTATE_COL_SIGN_NAME, Schema.RRSTATE_COL_ENH_ENABLED, _
+              Schema.RRSTATE_COL_TELEM_CAL, Schema.RRSTATE_COL_RAINFALL_MODE, _
+              Schema.RRSTATE_COL_RAIN_FACTOR, Schema.RRSTATE_COL_MIXING_MODEL, _
+              Schema.RRSTATE_COL_TAU, Schema.RRSTATE_COL_SURFACE_FRAC, _
+              Schema.RRSTATE_COL_TRIGGER_VOL, Schema.RRSTATE_COL_RES_CHEM, _
+              Schema.RRSTATE_COL_TRIG_CHEM, Schema.RRSTATE_COL_HIDDEN_MASS, _
+              Schema.RRSTATE_COL_IR_SNAPSHOT, Schema.RRSTATE_COL_LAST_MODIFIED)
+
+    ' Format date columns
+    Set tbl = ws.ListObjects(Schema.TABLE_RRSTATE)
+    If Not tbl Is Nothing Then
+        tbl.ListColumns(Schema.RRSTATE_COL_SAMPLE_DATE).Range.NumberFormat = "d/mm/yy"
+        tbl.ListColumns(Schema.RRSTATE_COL_LAST_MODIFIED).Range.NumberFormat = "d/mm/yy hh:mm"
+        tbl.Range.WrapText = False
+    End If
 End Sub
 
 ' ==== Results Sheet ==========================================================
