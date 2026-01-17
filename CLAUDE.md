@@ -177,13 +177,14 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Row shading: Sample date = light cyan, Run date = light green
   - Triggered values: Red + bold formatting on triggered metric cell
 - **History table structure:**
-  - Columns: RunId, Timestamp, RunDate, Days, RainfallMode, TelemCal, Tau, SurfaceFrac, RainFactor, StdMode, StdTriggerDay, StdTriggerMetric, EnhMode, EnhTriggerDay, EnhTriggerMetric, Action, Load
+  - Columns (14 bundled): RunId, Timestamp, RunDate, SampleDate, ResChemistry, IRSnapshot, Triggers, StdResult, EnhResult, EnhSettings, HiddenMass, SignName, Action, Load
+  - Bundled columns: Triggers=`Vol|EC|...|TAN`, StdResult/EnhResult=`Days|Metric`, EnhSettings=`Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac`
   - One row per run (captures both Std and Enh results; Enh columns blank when disabled)
   - Action column: "Current" (latest) or "Rollback" (older runs)
   - Load column: Click to restore settings without rollback
 - **Telemetry table:** Located on Results sheet at column L (tblTelemetry)
 - **Telemetry columns per site:** `EC (RP1)`, `Vol (RP1)` (Rain is global)
-- **RunId format:** `{site}-{date}-{seq}` (e.g., `RP1-20260115-001`)
+- **RunId format:** `{site}_{seq}` (e.g., `RP1_001`)
 - **Rollback:** Deletes future data, loads settings, auto-runs simulation
 - **Load Settings:** Restores config to Inputs (no deletion, no run)
 - **Charts:** 7 charts per site (1 dual-axis, 6 single-axis), stacked vertically
@@ -214,9 +215,9 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 **N7:O10 Sign Off Block:**
 ```
 N7:  Sign Off (header)
-N8:  Name label       O8: Name dropdown (linked to tblSign)
+N8:  Name label       O8: Name dropdown (linked to tblUsers)
 N9:  Signed label     O9: Signed value
-N10: Position label   O10: Position (VLOOKUP from tblSign)
+N10: Position label   O10: Position (VLOOKUP from tblUsers)
 ```
 
 **Column R-S (Enhanced Settings):**

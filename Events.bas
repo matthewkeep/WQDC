@@ -1,14 +1,17 @@
 Option Explicit
 ' Events: Worksheet event handlers.
-' Dependencies: Loader, Schema, WQOC, History, Data, RRState
+' Dependencies: Loader, Schema, WQOC, History, Data, RRState, Helpers, Setup
 
 ' Module-level state for site change tracking
 Private mPrevSite As String
-'
+
 ' NOTE: To enable events, add this code to each sheet module
 ' (right-click sheet tab > View Code):
 '
 ' === Inputs sheet ===
+'   Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'       Events.OnInputsSelectionChange Target
+'   End Sub
 '   Private Sub Worksheet_Change(ByVal Target As Range)
 '       Events.OnInputsChange Target
 '   End Sub
@@ -21,13 +24,20 @@ Private mPrevSite As String
 '       Events.OnHistoryDoubleClick Target, Cancel
 '   End Sub
 
-' ==== Change Events ============================================================
+' ==== Selection Events ========================================================
+
+Public Sub OnInputsSelectionChange(ByVal Target As Range)
+    ' Captures site value BEFORE user changes it
+    If Target.Cells.Count = 1 And MatchesRange(Target, Schema.NAME_SITE) Then
+        mPrevSite = Trim$(CStr(Target.Value))
+    End If
+End Sub
+
+' ==== Change Events ===========================================================
 
 Public Sub OnInputsChange(ByVal Target As Range)
-    ' Called from Inputs sheet Worksheet_Change event
     Dim v As String
 
-    ' Guard: skip if multi-cell change or error value
     If Target.Cells.Count > 1 Then Exit Sub
     On Error Resume Next
     v = Trim$(CStr(Target.Value))
@@ -40,36 +50,157 @@ Public Sub OnInputsChange(ByVal Target As Range)
         Exit Sub
     End If
 
-    ' Sample date change - load hidden mass for TwoBucket continuity
-    If MatchesRange(Target, Schema.NAME_SAMPLE_DATE) Then
-        Dim site As String, sampleDate As Date
-        site = Data.GetSite()
-        sampleDate = Helpers.GetDateVal(Target.Worksheet, Schema.NAME_SAMPLE_DATE)
-        If Len(site) > 0 And sampleDate > 0 Then Data.LoadHiddenForDate site, sampleDate
+    ' Date fields - validate, then handle sample date specifics
+    If MatchesRange(Target, Schema.NAME_RUN_DATE) Or MatchesRange(Target, Schema.NAME_SAMPLE_DATE) Then
+        If Not ValidateDateEntry(Target) Then Exit Sub
+        If MatchesRange(Target, Schema.NAME_SAMPLE_DATE) Then
+            Dim site As String, sampleDate As Date
+            site = Data.GetSite()
+            sampleDate = Helpers.GetDateVal(Target.Worksheet, Schema.NAME_SAMPLE_DATE)
+            If Len(site) > 0 And sampleDate > 0 Then Data.LoadHiddenForDate site, sampleDate
+        End If
         Exit Sub
     End If
 
     ' Trigger preset change
     If MatchesRange(Target, Schema.NAME_TRIGGER_PRESET) And Len(v) > 0 Then
         Loader.LoadTriggerPreset v
-        Exit Sub
     End If
 End Sub
 
 Private Sub HandleSiteChange(ByVal oldSite As String, ByVal newSite As String)
-    ' Saves old site state, restores new site state (or loads fresh if first visit)
-    ' Called when RR_Site dropdown changes
+    If Len(Trim$(oldSite)) > 0 Then RRState.Save oldSite
+    If Not RRState.Load(newSite) Then Loader.LoadSiteData newSite
+End Sub
 
-    ' Save outgoing site state (if we have a previous site)
-    If Len(Trim$(oldSite)) > 0 Then
-        RRState.Save oldSite
+' ==== Double-Click Events =====================================================
+
+Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
+    Dim ws As Worksheet
+    Set ws = Target.Worksheet
+
+    ' Action cells (Run, Load Latest)
+    If DispatchAction(Target, ws, Schema.NAME_RUN_CELL, "WQOC.Run") Then Cancel = True: Exit Sub
+    If DispatchAction(Target, ws, Schema.NAME_LOAD_CELL, "Loader.LoadLatest") Then Cancel = True: Exit Sub
+
+    ' Toggle cells
+    If Toggle(Target, ws, Schema.NAME_ENHANCED_MODE, "On", "Off") Then Cancel = True: Exit Sub
+    If Toggle(Target, ws, Schema.NAME_TELEM_CAL, "On", "Off") Then Cancel = True: Exit Sub
+    If TogglePredMode(Target, ws) Then Cancel = True: Exit Sub
+
+    ' IR table interactions
+    If HandleIRClick(Target) Then Cancel = True
+End Sub
+
+Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
+    Dim ws As Worksheet, tbl As ListObject, lo As ListObject
+    Dim idCol As Long, actionCol As Long, loadCol As Long, rowIdx As Long
+    Dim runId As String, site As String
+
+    Set ws = Target.Worksheet
+
+    ' Find clicked history table
+    For Each lo In ws.ListObjects
+        If Left$(lo.Name, Len(Schema.HISTORY_TABLE_PREFIX)) = Schema.HISTORY_TABLE_PREFIX Then
+            If Helpers.HasData(lo) And Not Intersect(Target, lo.Range) Is Nothing Then
+                Set tbl = lo
+                Exit For
+            End If
+        End If
+    Next lo
+    If tbl Is Nothing Then Exit Sub
+
+    ' Get row context
+    site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
+    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
+    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
+    If idCol = 0 Or actionCol = 0 Then Exit Sub
+
+    rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
+    If rowIdx < 1 Or rowIdx > tbl.ListRows.Count Then Exit Sub
+    runId = tbl.DataBodyRange.Cells(rowIdx, idCol).Value
+
+    ' Load column - restore settings only
+    If loadCol > 0 And Not Intersect(Target, tbl.DataBodyRange.Columns(loadCol)) Is Nothing Then
+        Cancel = True
+        If History.LoadSettings(runId, site) Then MsgBox "Settings loaded from " & runId, vbInformation, "WQOC"
+        Exit Sub
     End If
 
-    ' Try to restore saved state; if none exists, load fresh from catalog
-    If Not RRState.Load(newSite) Then
-        Loader.LoadSiteData newSite
+    ' Action column - rollback
+    If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
+        Cancel = True
+        If rowIdx = tbl.ListRows.Count Then
+            MsgBox "This is the current run.", vbInformation, "WQOC"
+        ElseIf MsgBox("Rollback to run " & runId & "?" & vbNewLine & _
+                      "This will remove all runs after this one and re-run.", vbYesNo + vbQuestion, "WQOC") = vbYes Then
+            History.RollbackTo runId, site
+            RefreshHistoryActions tbl
+            History.LoadSettings runId, site
+            WQOC.Replay
+        End If
     End If
 End Sub
+
+' ==== IR Table Actions ========================================================
+
+Private Function HandleIRClick(ByVal Target As Range) As Boolean
+    Dim tbl As ListObject, actionCol As Long, activeCol As Long, rowIdx As Long
+
+    Set tbl = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
+    If tbl Is Nothing Then Exit Function
+
+    actionCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTION)
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+
+    ' Header click - add row
+    If actionCol > 0 And Not Intersect(Target, tbl.HeaderRowRange.Cells(1, actionCol)) Is Nothing Then
+        AddIRRow tbl
+        HandleIRClick = True
+        Exit Function
+    End If
+
+    ' Data row click
+    If Not Helpers.HasData(tbl) Then Exit Function
+    rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
+    If rowIdx < 1 Or rowIdx > tbl.ListRows.Count Then Exit Function
+
+    ' Active column - toggle
+    If activeCol > 0 And Not Intersect(Target, tbl.DataBodyRange.Columns(activeCol)) Is Nothing Then
+        ToggleCell tbl.DataBodyRange.Cells(rowIdx, activeCol), "Yes", "No"
+        HandleIRClick = True
+        Exit Function
+    End If
+
+    ' Action column - remove
+    If actionCol > 0 And Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
+        tbl.ListRows(rowIdx).Delete
+        HandleIRClick = True
+    End If
+End Function
+
+Private Sub AddIRRow(ByVal tbl As ListObject)
+    Dim newRow As ListRow, activeCol As Long, isFirst As Boolean
+    isFirst = Not Helpers.HasData(tbl)
+    Set newRow = tbl.ListRows.Add
+    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
+    If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
+    Helpers.InitIRRowAction newRow.Range, tbl
+    If isFirst Then Setup.ApplyIRActiveConditionalFormat tbl
+End Sub
+
+Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
+    Dim i As Long, actionCol As Long
+    If Not Helpers.HasData(tbl) Then Exit Sub
+    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
+    If actionCol = 0 Then Exit Sub
+    For i = 1 To tbl.ListRows.Count
+        tbl.DataBodyRange.Cells(i, actionCol).Value = IIf(i = tbl.ListRows.Count, Schema.ACTION_CURRENT, Schema.ACTION_ROLLBACK)
+    Next i
+End Sub
+
+' ==== Helpers =================================================================
 
 Private Function MatchesRange(ByVal Target As Range, ByVal nm As String) As Boolean
     Dim rng As Range
@@ -79,232 +210,59 @@ Private Function MatchesRange(ByVal Target As Range, ByVal nm As String) As Bool
     If Not rng Is Nothing Then MatchesRange = Not Intersect(Target, rng) Is Nothing
 End Function
 
-' ==== Double-Click Events ======================================================
-
-Public Sub OnInputsDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
-    ' Handle double-clicks on Inputs sheet
-    Dim ws As Worksheet, runCell As Range, loadCell As Range, tbl As ListObject
-    Dim actionCol As Long, rowIdx As Long
-
-    Set ws = Target.Worksheet
-
-    ' Check Run Simulation cell
-    On Error Resume Next
-    Set runCell = ws.Range(Schema.NAME_RUN_CELL)
-    On Error GoTo 0
-    If Not runCell Is Nothing Then
-        If Not Intersect(Target, runCell) Is Nothing Then
-            Cancel = True
-            WQOC.Run
-            Exit Sub
-        End If
-    End If
-
-    ' Check Load Latest cell
-    On Error Resume Next
-    Set loadCell = ws.Range(Schema.NAME_LOAD_CELL)
-    On Error GoTo 0
-    If Not loadCell Is Nothing Then
-        If Not Intersect(Target, loadCell) Is Nothing Then
-            Cancel = True
-            Loader.LoadLatest
-            Exit Sub
-        End If
-    End If
-
-    ' Check On/Off toggle cells (Enhanced Mode, Telemetry Cal)
-    If ToggleOnOff(Target, ws, Schema.NAME_ENHANCED_MODE) Then Cancel = True: Exit Sub
-    If ToggleOnOff(Target, ws, Schema.NAME_TELEM_CAL) Then Cancel = True: Exit Sub
-
-    ' Check Std/Enh toggle for Predicted row
-    If ToggleStdEnh(Target, ws, Schema.NAME_PRED_MODE) Then Cancel = True: Exit Sub
-
-    ' Check IR table
-    Set tbl = Helpers.GetTable(Schema.SHEET_INPUT, Schema.TABLE_IR)
-    If Not tbl Is Nothing Then
-        actionCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTION)
-        Dim activeCol As Long
-        activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
-
-        ' Check Add Input header
-        If actionCol > 0 Then
-            If Not Intersect(Target, tbl.HeaderRowRange.Cells(1, actionCol)) Is Nothing Then
-                Cancel = True
-                AddIRRow tbl
-                Exit Sub
-            End If
-        End If
-
-        ' Check data rows
-        If Not tbl.DataBodyRange Is Nothing Then
-            rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
-            If rowIdx >= 1 And rowIdx <= tbl.ListRows.Count Then
-                ' Active column - toggle Yes/No
-                If activeCol > 0 Then
-                    If Not Intersect(Target, tbl.DataBodyRange.Columns(activeCol)) Is Nothing Then
-                        Cancel = True
-                        ToggleActiveRow tbl, rowIdx
-                        Exit Sub
-                    End If
-                End If
-                ' Action column - remove row
-                If actionCol > 0 Then
-                    If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
-                        Cancel = True
-                        RemoveIRRow tbl, rowIdx
-                        Exit Sub
-                    End If
-                End If
-            End If
-        End If
-    End If
-End Sub
-
-Public Sub OnHistoryDoubleClick(ByVal Target As Range, ByRef Cancel As Boolean)
-    ' Handle double-clicks on History sheet (per-site tables)
-    Dim ws As Worksheet, tbl As ListObject, lo As ListObject
-    Dim idCol As Long, actionCol As Long, loadCol As Long, rowIdx As Long, runId As String, site As String
-
-    Set ws = Target.Worksheet
-
-    ' Find which table was clicked (if any)
-    Set tbl = Nothing
-    For Each lo In ws.ListObjects
-        If Left$(lo.Name, Len(Schema.HISTORY_TABLE_PREFIX)) = Schema.HISTORY_TABLE_PREFIX Then
-            If Not lo.DataBodyRange Is Nothing Then
-                If Not Intersect(Target, lo.Range) Is Nothing Then
-                    Set tbl = lo
-                    Exit For
-                End If
-            End If
-        End If
-    Next lo
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
-
-    ' Extract site from table name (e.g., "tblHistory_RP1" -> "RP1")
-    site = Mid$(tbl.Name, Len(Schema.HISTORY_TABLE_PREFIX) + 1)
-
-    idCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_RUNID)
-    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
-    loadCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_LOAD)
-    If idCol = 0 Or actionCol = 0 Then Exit Sub
-    rowIdx = Target.Row - tbl.DataBodyRange.Row + 1
-    If rowIdx < 1 Or rowIdx > tbl.ListRows.Count Then Exit Sub
-    runId = tbl.DataBodyRange.Cells(rowIdx, idCol).Value
-
-    ' Check if clicked in Load column - restore settings only (no deletion, no run)
-    If loadCol > 0 Then
-        If Not Intersect(Target, tbl.DataBodyRange.Columns(loadCol)) Is Nothing Then
-            Cancel = True
-            If History.LoadSettings(runId, site) Then
-                MsgBox "Settings loaded from " & runId, vbInformation, "WQOC"
-            End If
-            Exit Sub
-        End If
-    End If
-
-    ' Check if clicked in Action column - rollback with auto-run
-    If actionCol > 0 Then
-        If Not Intersect(Target, tbl.DataBodyRange.Columns(actionCol)) Is Nothing Then
-            Cancel = True
-
-            ' Don't rollback the most recent (Current) row
-            If rowIdx = tbl.ListRows.Count Then
-                MsgBox "This is the current run.", vbInformation, "WQOC"
-                Exit Sub
-            End If
-
-            If MsgBox("Rollback to run " & runId & "?" & vbNewLine & _
-                      "This will remove all runs after this one and re-run.", vbYesNo + vbQuestion, "WQOC") = vbYes Then
-                History.RollbackTo runId, site
-                RefreshHistoryActions tbl
-                History.LoadSettings runId, site
-                WQOC.Replay
-            End If
-        End If
-    End If
-End Sub
-
-' ==== IR Table Actions =========================================================
-
-Private Sub AddIRRow(ByVal tbl As ListObject)
-    ' Add a new empty row to IR table with "Remove" action and Active=Yes
-    Dim newRow As ListRow, activeCol As Long
-    Dim isFirstRow As Boolean
-
-    isFirstRow = (tbl.DataBodyRange Is Nothing)
-    Set newRow = tbl.ListRows.Add
-    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
-    Helpers.InitIRRowAction newRow.Range, tbl
-    If isFirstRow Then Setup.ApplyIRActiveConditionalFormat tbl
-End Sub
-
-Private Sub ToggleActiveRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
-    ' Toggle Active between Yes/No (conditional formatting handles grey-out)
-    Dim activeCol As Long, cell As Range
-    Dim isActive As Boolean
-
-    activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
-    If activeCol = 0 Then Exit Sub
-
-    Set cell = tbl.DataBodyRange.Cells(rowIdx, activeCol)
-
-    ' Toggle value - conditional formatting auto-greys when Active="No"
-    isActive = (UCase$(Trim$(cell.Value)) = "YES")
-    cell.Value = IIf(isActive, "No", "Yes")
-End Sub
-
-Private Sub RemoveIRRow(ByVal tbl As ListObject, ByVal rowIdx As Long)
-    tbl.ListRows(rowIdx).Delete
-End Sub
-
-Private Sub RefreshHistoryActions(ByVal tbl As ListObject)
-    ' Update action column text: "Current" for last row, "Rollback" for others
-    Dim i As Long, actionCol As Long
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
-    actionCol = Helpers.ColIdx(tbl, Schema.HISTORY_COL_ACTION)
-    If actionCol = 0 Then Exit Sub
-
-    For i = 1 To tbl.ListRows.Count
-        If i = tbl.ListRows.Count Then
-            tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_CURRENT
-        Else
-            tbl.DataBodyRange.Cells(i, actionCol).Value = Schema.ACTION_ROLLBACK
-        End If
-    Next i
-End Sub
-
-' ==== Toggle Helpers ===========================================================
-
-Private Function ToggleOnOff(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
-    ' Toggle On/Off for named range if clicked; returns True if handled
-    Dim rng As Range, newValue As String
+Private Function DispatchAction(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String, ByVal action As String) As Boolean
+    ' Check if target matches named range; if so, run action and return True
+    Dim rng As Range
     On Error Resume Next
     Set rng = ws.Range(nm)
     On Error GoTo 0
-    If rng Is Nothing Then Exit Function
-    If Intersect(Target, rng) Is Nothing Then Exit Function
+    If rng Is Nothing Or Intersect(Target, rng) Is Nothing Then Exit Function
 
-    newValue = IIf(UCase$(Trim$(rng.Value)) = "ON", "Off", "On")
-    rng.Value = newValue
-    ToggleOnOff = True
+    Select Case action
+        Case "WQOC.Run": WQOC.Run
+        Case "Loader.LoadLatest": Loader.LoadLatest
+    End Select
+    DispatchAction = True
 End Function
 
-Private Function ToggleStdEnh(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String) As Boolean
-    ' Toggle Standard/Enhanced for named range if clicked; returns True if handled
-    Dim rng As Range, current As String, newMode As String
+Private Function Toggle(ByVal Target As Range, ByVal ws As Worksheet, ByVal nm As String, ByVal valA As String, ByVal valB As String) As Boolean
+    ' Generic toggle between two values; returns True if handled
+    Dim rng As Range
     On Error Resume Next
     Set rng = ws.Range(nm)
     On Error GoTo 0
-    If rng Is Nothing Then Exit Function
-    If Intersect(Target, rng) Is Nothing Then Exit Function
+    If rng Is Nothing Or Intersect(Target, rng) Is Nothing Then Exit Function
 
-    current = UCase$(Trim$(rng.Value))
-    newMode = IIf(current = "STANDARD", "Enhanced", "Standard")
+    rng.Value = IIf(UCase$(Trim$(rng.Value)) = UCase$(valA), valB, valA)
+    Toggle = True
+End Function
+
+Private Function TogglePredMode(ByVal Target As Range, ByVal ws As Worksheet) As Boolean
+    ' Special toggle for Pred Mode that also refreshes display
+    Dim rng As Range, newMode As String
+    On Error Resume Next
+    Set rng = ws.Range(Schema.NAME_PRED_MODE)
+    On Error GoTo 0
+    If rng Is Nothing Or Intersect(Target, rng) Is Nothing Then Exit Function
+
+    newMode = IIf(UCase$(Trim$(rng.Value)) = "STANDARD", "Enhanced", "Standard")
     rng.Value = newMode
     Data.RefreshPredictedRow newMode
-    ToggleStdEnh = True
+    TogglePredMode = True
 End Function
 
+Private Sub ToggleCell(ByVal cell As Range, ByVal valA As String, ByVal valB As String)
+    cell.Value = IIf(UCase$(Trim$(cell.Value)) = UCase$(valA), valB, valA)
+End Sub
+
+Private Function ValidateDateEntry(ByVal Target As Range) As Boolean
+    Dim v As Variant
+    v = Target.Value
+    If IsEmpty(v) Or Len(Trim$(CStr(v))) = 0 Then ValidateDateEntry = True: Exit Function
+    If IsDate(v) Then ValidateDateEntry = True: Exit Function
+
+    Application.EnableEvents = False
+    Target.ClearContents
+    Application.EnableEvents = True
+    MsgBox "Please enter a valid date.", vbExclamation, "WQOC"
+End Function
