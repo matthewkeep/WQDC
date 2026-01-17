@@ -57,7 +57,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **History.bas** | Audit trail, rollback, LoadSettings (restore config) |
 | **SimLog.bas** | Date-centric live log (UPSERT to tblLive) |
 | **Loader.bas** | Site selection, IR/chemistry population |
-| **Events.bas** | Worksheet handlers, double-click toggles, action dispatching |
+| **Events.bas** | Worksheet handlers, double-click toggles, date validation |
 | **WQOC.bas** | Entry point, orchestration, chart generation |
 | **Schema.bas** | Constants only (names, colors, defaults) |
 | **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, styling, range access) |
@@ -66,7 +66,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **Backtest.bas** | Season replay for A/B comparison |
 | **Tests.bas** | Smoke tests |
 | **Scenarios.bas** | Regression scenarios |
-| **Validate.bas** | Structure validation |
+| **Validate.bas** | Structure validation, date format checks |
 | **DictionaryShim.cls** | Mac compatibility |
 
 ### Core Types
@@ -258,6 +258,8 @@ Tests.RunSmokeSuite      ' 10 smoke tests for core math
 Scenarios.RunAll         ' 6 regression scenarios
 Backtest.RunSeason       ' Season replay with A/B comparison (Std vs Enh)
 ```
+
+**Date validation:** Run Date (K3) and Sample Date (L3) are validated on entry (Events.bas) and before run (Validate.bas). Invalid dates are cleared with user message.
 
 ## Verified Patterns (Required)
 

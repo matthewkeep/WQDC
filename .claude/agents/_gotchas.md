@@ -46,7 +46,7 @@ Accumulated learnings. All agents should reference this before making changes.
 |--------|----------|------------------|
 | Schema.bas | Constants, ChemistryNames(), column name builders | Helper functions, utilities |
 | Helpers.bas | ColIdx, GetSheet, GetTable, GetRng, WriteToRange, ReadFromRange, GetDateVal, FindRowByDate, styling | Business logic, constants |
-| Events.bas | Event dispatch, toggle helpers | IR table operations (use Helpers) |
+| Events.bas | Event dispatch, toggle helpers, date validation | IR table operations (use Helpers) |
 | History.bas | Audit trail, LoadSettings | UI updates (triggers Events) |
 | Data.bas | Worksheet I/O, state loading/saving | Duplicate helpers (use Helpers.bas) |
 
@@ -54,11 +54,12 @@ Accumulated learnings. All agents should reference this before making changes.
 
 - **Error handling**: `On Error GoTo Cleanup` with state restoration
 - **Performance**: `Application.ScreenUpdating = False` bracket
-- **Tables**: Always check `tbl.DataBodyRange Is Nothing` before access
+- **Tables**: Always check `Helpers.HasData(tbl)` or `tbl.DataBodyRange Is Nothing` before access
 - **Rollback**: Delete from bottom up to avoid index shift
 - **Conditional formatting**: Clear all first, then add rules, Enhanced last
-- **Double-click toggle**: Return Boolean, check Intersect, call `ToggleOnOff`
+- **Double-click toggle**: Return Boolean, check Intersect, use generic `Toggle()` helper
 - **LoadSettings**: Write to named ranges, Sample Date change auto-triggers hidden mass load
+- **Date validation**: Validate on entry (Events.bas) + backup check before run (Validate.bas)
 
 ## Anti-Patterns Found
 
@@ -95,20 +96,40 @@ ApplyGreyoutFormat ws.Range("R7:S16"), ...  ' Mixing settings (greyed when Simpl
 ApplyGreyoutFormat ws.Range("R3:S16"), ...  ' Highest priority - whole block when Off
 ```
 
-## History Table Columns (17 total)
+## History Table Columns (14 bundled)
 
 ```
-RunId, Timestamp, RunDate, Days, RainfallMode, TelemCal,
-Tau, SurfaceFrac, RainFactor,
-StdMode, StdTriggerDay, StdTriggerMetric,
-EnhMode, EnhTriggerDay, EnhTriggerMetric,
-Action, Load
+RunId, Timestamp, RunDate, SampleDate,
+ResChemistry, IRSnapshot, Triggers,
+StdResult, EnhResult, EnhSettings,
+HiddenMass, SignName, Action, Load
 ```
+
+Bundled formats:
+- Triggers: `Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN`
+- StdResult/EnhResult: `Days|TriggerMetric` (Days = days from run date, negative = past)
+- EnhSettings: `Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac` (same as RRState)
+- RunId format: `{site}_{seq}` (e.g., `RP1_001`)
 
 - One row per run (captures both Std and Enh results)
-- Enh columns blank when Enhanced disabled
+- EnhSettings always stored (captures "Off" state explicitly)
 - Action: "Current" or "Rollback"
 - Load: Always "Load" (clickable to restore settings)
+
+## RRState Table Columns (9 bundled)
+
+```
+Site, SampleDate, ResChemistry, IRSnapshot,
+Triggers, EnhSettings, HiddenMass, SignName, LastModified
+```
+
+Bundled formats (same as History):
+- Triggers: `Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN`
+- EnhSettings: `Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac`
+
+- One row per site (current state cache)
+- Cleared on Build (same as History/Live tables)
+- WrapText disabled (IRSnapshot contains newlines)
 
 ## Live Table Columns (28 total)
 
@@ -135,9 +156,9 @@ ErrVol, ErrEC, RunId
 **N7:O10 Sign Off Block:**
 ```
 N7:  Sign Off header
-N8:  Name label       O8: Name dropdown (linked to tblSign)
+N8:  Name label       O8: Name dropdown (linked to tblUsers)
 N9:  Signed label     O9: Signed value
-N10: Position label   O10: Position (VLOOKUP from tblSign)
+N10: Position label   O10: Position (VLOOKUP from tblUsers)
 ```
 
 **R1:S16 Enhanced Settings Block (greyed when Enhanced=Off):**
