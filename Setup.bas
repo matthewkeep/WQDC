@@ -288,7 +288,7 @@ Private Sub SetupInput()
     SetIfEmpty ws.Range("R7"), "Tau (days)": AddNm Schema.NAME_TAU, ws.Range("S7")
     SetIfEmpty ws.Range("R8"), "Surface Fraction": AddNm Schema.NAME_SURFACE_FRACTION, ws.Range("S8")
     SetIfEmpty ws.Range("R9"), "HIDDEN MASS"
-    For i = 0 To n - 1: SetIfEmpty ws.Cells(10 + i, 18), chem(i): Next i
+    For i = 0 To n - 1: ws.Cells(10 + i, 18).Value = chem(i): Next i
     AddNm Schema.NAME_HIDDEN_MASS, ws.Range("S10").Resize(n, 1)
 
     ' --- Conditional Formatting ---
@@ -332,21 +332,21 @@ Private Sub SetupConfig()
     chem = Schema.ChemistryNames(): n = Schema.ChemistryCount()
 
     ws.Range("A1") = "INDEX": ws.Range("A1").Font.Bold = True
-    MakeTbl ws, ws.Range("A2"), Schema.TABLE_INDEX, Array("RR", "IR", "Flow")
+    MakeTbl ws, ws.Range("A2"), Schema.TABLE_INDEX, Array(Schema.INDEX_COL_SITE, Schema.INDEX_COL_IR, Schema.INDEX_COL_FLOW)
 
     ws.Range("E1") = "TRIGGERS": ws.Range("E1").Font.Bold = True
-    ReDim h(1 To n + 2): h(1) = "Preset": h(2) = Schema.VOLUME_METRIC_NAME
+    ReDim h(1 To n + 2): h(1) = Schema.TRIGGERS_COL_PRESET: h(2) = Schema.TRIGGERS_COL_VOL
     For i = 1 To n: h(2 + i) = chem(i - 1): Next i
     MakeTbl ws, ws.Range("E2"), Schema.TABLE_TRIGGERS, h
 
     ws.Range("O1") = "USERS": ws.Range("O1").Font.Bold = True
-    MakeTbl ws, ws.Range("O2"), Schema.TABLE_USERS, Array("Name", "Position")
+    MakeTbl ws, ws.Range("O2"), Schema.TABLE_USERS, Array(Schema.USERS_COL_NAME, Schema.USERS_COL_POSITION)
 
     CreateRRStateTable ws
 End Sub
 
 Private Sub CreateRRStateTable(ByVal ws As Worksheet)
-    ' Creates tblRRState for per-site settings persistence (9 bundled columns)
+    ' Creates tblRRState for per-site settings persistence (12 bundled columns)
     Dim tbl As ListObject
 
     On Error Resume Next
@@ -356,17 +356,19 @@ Private Sub CreateRRStateTable(ByVal ws As Worksheet)
 
     ws.Range("R1") = "RR STATE": ws.Range("R1").Font.Bold = True
     MakeTbl ws, ws.Range("R2"), Schema.TABLE_RRSTATE, _
-        Array(Schema.RRSTATE_COL_SITE, Schema.RRSTATE_COL_SAMPLE_DATE, _
+        Array(Schema.RRSTATE_COL_SITE, Schema.RRSTATE_COL_RUN_DATE, _
+              Schema.RRSTATE_COL_SAMPLE_DATE, Schema.RRSTATE_COL_OUTFLOW, _
               Schema.RRSTATE_COL_RES_CHEM, Schema.RRSTATE_COL_IR_SNAPSHOT, _
               Schema.RRSTATE_COL_TRIGGERS, Schema.RRSTATE_COL_ENH_SETTINGS, _
               Schema.RRSTATE_COL_HIDDEN_MASS, Schema.RRSTATE_COL_SIGN_NAME, _
-              Schema.RRSTATE_COL_LAST_MODIFIED)
+              Schema.RRSTATE_COL_PRED_VIEW, Schema.RRSTATE_COL_LAST_MODIFIED)
 
-    ' Format date columns (col 2 = SampleDate, col 9 = LastModified)
+    ' Format date columns (col 2 = RunDate, col 3 = SampleDate, col 12 = LastModified)
     Set tbl = ws.ListObjects(Schema.TABLE_RRSTATE)
     If Not tbl Is Nothing Then
         tbl.ListColumns(2).Range.NumberFormat = "d/mm/yy"
-        tbl.ListColumns(9).Range.NumberFormat = "d/mm/yy hh:mm"
+        tbl.ListColumns(3).Range.NumberFormat = "d/mm/yy"
+        tbl.ListColumns(12).Range.NumberFormat = "d/mm/yy hh:mm"
         tbl.Range.WrapText = False
     End If
 End Sub
@@ -766,62 +768,6 @@ Private Sub SeedFullTelemetry()
     Next i
 End Sub
 
-Public Sub SeedSiteTelemFull(ByVal site As String)
-    ' Seeds 90 days of EC/Vol telemetry for a specific site
-    ' Call after Initialize creates the site columns
-    Dim ws As Worksheet, tbl As ListObject, i As Long
-    Dim ecCol As Long, volCol As Long
-    Dim baseEC As Double, baseVol As Double
-    Dim ec As Double, vol As Double, rain As Double
-
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_RESULTS)
-    Set tbl = ws.ListObjects(Schema.TABLE_TELEMETRY)
-    If tbl Is Nothing Then Exit Sub
-    If tbl.DataBodyRange Is Nothing Then Exit Sub
-
-    On Error Resume Next
-    ecCol = tbl.ListColumns(Helpers.TelemECColName(site)).Index
-    volCol = tbl.ListColumns(Helpers.TelemVolColName(site)).Index
-    On Error GoTo 0
-    If ecCol = 0 Or volCol = 0 Then Exit Sub
-
-    ' Set baseline based on site
-    Select Case UCase$(site)
-        Case "RP1": baseEC = 280: baseVol = 150
-        Case "RP2": baseEC = 350: baseVol = 120
-        Case Else: baseEC = 300: baseVol = 130
-    End Select
-
-    ec = baseEC
-    vol = baseVol
-
-    For i = 1 To tbl.ListRows.Count
-        rain = tbl.DataBodyRange.Cells(i, 2).Value
-
-        ' Volume responds to rain (simplified water balance)
-        vol = vol + rain * 0.5 - 1.5  ' Catchment factor, outflow
-        If vol < 50 Then vol = 50
-        If vol > 250 Then vol = 250
-
-        ' EC diluted by rain, concentrated by evap
-        If rain > 5 Then
-            ec = ec * 0.97 - rain * 0.3  ' Dilution from significant rain
-        Else
-            ec = ec * 1.002  ' Slight concentration
-        End If
-        If ec < 150 Then ec = 150
-        If ec > 600 Then ec = 600
-
-        ' Add measurement noise and some gaps
-        If Rnd() > 0.15 Then  ' 85% data availability
-            tbl.DataBodyRange.Cells(i, ecCol) = Round(ec + Rnd() * 10 - 5, 0)
-        End If
-        If Rnd() > 0.7 Then  ' 30% volume readings (less frequent)
-            tbl.DataBodyRange.Cells(i, volCol) = Round(vol + Rnd() * 5 - 2.5, 1)
-        End If
-    Next i
-End Sub
-
 ' ==== Chart Sheet ============================================================
 
 Private Sub SetupChart()
@@ -900,7 +846,7 @@ End Sub
 ' ==== Per-Site Table Creation (called on-demand) =============================
 
 Public Sub EnsureSiteHistoryTable(ByVal site As String)
-    ' Creates history table for site if it doesn't exist (14 bundled columns)
+    ' Creates history table for site if it doesn't exist (15 columns)
     Dim ws As Worksheet, tbl As ListObject, tblName As String
     Dim startCol As Long
 
@@ -921,11 +867,11 @@ Public Sub EnsureSiteHistoryTable(ByVal site As String)
     MakeTbl ws, ws.Cells(2, startCol), tblName, _
         Array(Schema.HISTORY_COL_RUNID, Schema.HISTORY_COL_TIMESTAMP, _
               Schema.HISTORY_COL_RUNDATE, Schema.HISTORY_COL_SAMPLE_DATE, _
-              Schema.HISTORY_COL_RES_CHEM, Schema.HISTORY_COL_IR_SNAPSHOT, _
-              Schema.HISTORY_COL_TRIGGERS, Schema.HISTORY_COL_STD_RESULT, _
-              Schema.HISTORY_COL_ENH_RESULT, Schema.HISTORY_COL_ENH_SETTINGS, _
-              Schema.HISTORY_COL_HIDDEN_MASS, Schema.HISTORY_COL_SIGN_NAME, _
-              Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
+              Schema.HISTORY_COL_OUTFLOW, Schema.HISTORY_COL_RES_CHEM, _
+              Schema.HISTORY_COL_IR_SNAPSHOT, Schema.HISTORY_COL_TRIGGERS, _
+              Schema.HISTORY_COL_STD_RESULT, Schema.HISTORY_COL_ENH_RESULT, _
+              Schema.HISTORY_COL_ENH_SETTINGS, Schema.HISTORY_COL_HIDDEN_MASS, _
+              Schema.HISTORY_COL_SIGN_NAME, Schema.HISTORY_COL_ACTION, Schema.HISTORY_COL_LOAD)
 
     ' Format table (col 2 = Timestamp, col 3 = RunDate, col 4 = SampleDate)
     Set tbl = ws.ListObjects(tblName)
@@ -1120,19 +1066,24 @@ End Sub
 
 Private Sub ApplyTableDropdown(ByVal ws As Worksheet, ByVal rangeName As String, _
                                ByVal tableName As String, ByVal columnName As String)
-    ' Applies dropdown from table column using INDIRECT (silent failure)
+    ' Applies dropdown from table column using INDIRECT
+    Dim rng As Range
     On Error Resume Next
-    With ws.Range(rangeName).Validation
-        .Delete
-        .Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & tableName & "[" & columnName & "]"")"
-    End With
+    Set rng = ws.Range(rangeName)
+    On Error GoTo 0
+    If rng Is Nothing Then Exit Sub
+
+    On Error Resume Next
+    rng.Validation.Delete
+    rng.Validation.Add Type:=xlValidateList, Formula1:="=INDIRECT(""" & tableName & "[" & columnName & "]"")"
+    On Error GoTo 0
 End Sub
 
 Private Sub ApplyTableValidations(ByVal ws As Worksheet)
     ' Table-based dropdowns (requires Seed to populate tables first)
-    ApplyTableDropdown ws, Schema.NAME_SITE, Schema.TABLE_INDEX, "RR"
-    ApplyTableDropdown ws, Schema.NAME_TRIGGER_PRESET, Schema.TABLE_TRIGGERS, "Preset"
-    ApplyTableDropdown ws, Schema.NAME_SIGN_OFF_NAME, Schema.TABLE_USERS, "Name"
+    ApplyTableDropdown ws, Schema.NAME_SITE, Schema.TABLE_INDEX, Schema.INDEX_COL_SITE
+    ApplyTableDropdown ws, Schema.NAME_TRIGGER_PRESET, Schema.TABLE_TRIGGERS, Schema.TRIGGERS_COL_PRESET
+    ApplyTableDropdown ws, Schema.NAME_SIGN_OFF_NAME, Schema.TABLE_USERS, Schema.USERS_COL_NAME
 End Sub
 
 Private Sub ApplyGreyoutFormat(ByVal targetRange As Range, ByVal formula As String)
@@ -1170,6 +1121,29 @@ Public Sub ApplyIRActiveConditionalFormat(ByVal tbl As ListObject)
         .Font.Color = RGB(180, 180, 180)  ' Grey text
         .Interior.Color = RGB(242, 242, 242)  ' Light grey background
     End With
+End Sub
+
+Public Sub ApplyIRSourceDropdown(ByVal tbl As ListObject)
+    ' Applies dropdown to IR Source column with all unique sites from tblResults
+    ' Call after IR table has data or when adding new rows
+    Dim sourceCol As Long, sources As String
+
+    sourceCol = Helpers.ColIdx(tbl, Schema.IR_COL_SOURCE)
+    If sourceCol = 0 Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+
+    sources = Loader.GetResultsSources()
+    If Len(sources) = 0 Then Exit Sub
+
+    On Error Resume Next
+    With tbl.ListColumns(sourceCol).DataBodyRange.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertInformation, Formula1:=sources
+        .IgnoreBlank = True
+        .ShowInput = False
+        .ShowError = False
+    End With
+    On Error GoTo 0
 End Sub
 
 Private Sub AddNm(ByVal nm As String, ByVal rng As Range)

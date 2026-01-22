@@ -27,10 +27,11 @@ Private mPrevSite As String
 ' ==== Selection Events ========================================================
 
 Public Sub OnInputsSelectionChange(ByVal Target As Range)
-    ' Captures site value BEFORE user changes it
-    If Target.Cells.Count = 1 And MatchesRange(Target, Schema.NAME_SITE) Then
-        mPrevSite = Trim$(CStr(Target.Value))
-    End If
+    ' Captures site value BEFORE user changes it (skip multi-cell selections)
+    On Error Resume Next
+    If Target.Cells.Count <> 1 Then Exit Sub
+    On Error GoTo 0
+    If MatchesRange(Target, Schema.NAME_SITE) Then mPrevSite = Trim$(CStr(Target.Value))
 End Sub
 
 ' ==== Change Events ===========================================================
@@ -38,8 +39,8 @@ End Sub
 Public Sub OnInputsChange(ByVal Target As Range)
     Dim v As String
 
-    If Target.Cells.Count > 1 Then Exit Sub
     On Error Resume Next
+    If Target.Cells.Count <> 1 Then Exit Sub
     v = Trim$(CStr(Target.Value))
     On Error GoTo 0
 
@@ -65,6 +66,12 @@ Public Sub OnInputsChange(ByVal Target As Range)
     ' Trigger preset change
     If MatchesRange(Target, Schema.NAME_TRIGGER_PRESET) And Len(v) > 0 Then
         Loader.LoadTriggerPreset v
+        Exit Sub
+    End If
+
+    ' IR Source selection - load chemistry from Results
+    If Helpers.IsInTableColumn(Target, Schema.SHEET_INPUT, Schema.TABLE_IR, Schema.IR_COL_SOURCE) And Len(v) > 0 Then
+        Loader.RefreshIRRow Target
     End If
 End Sub
 
@@ -156,7 +163,7 @@ Private Function HandleIRClick(ByVal Target As Range) As Boolean
 
     ' Header click - add row
     If actionCol > 0 And Not Intersect(Target, tbl.HeaderRowRange.Cells(1, actionCol)) Is Nothing Then
-        AddIRRow tbl
+        AddEmptyIRRow tbl
         HandleIRClick = True
         Exit Function
     End If
@@ -180,14 +187,17 @@ Private Function HandleIRClick(ByVal Target As Range) As Boolean
     End If
 End Function
 
-Private Sub AddIRRow(ByVal tbl As ListObject)
+Private Sub AddEmptyIRRow(ByVal tbl As ListObject)
     Dim newRow As ListRow, activeCol As Long, isFirst As Boolean
     isFirst = Not Helpers.HasData(tbl)
     Set newRow = tbl.ListRows.Add
     activeCol = Helpers.ColIdx(tbl, Schema.IR_COL_ACTIVE)
     If activeCol > 0 Then newRow.Range.Cells(1, activeCol).Value = "Yes"
     Helpers.InitIRRowAction newRow.Range, tbl
-    If isFirst Then Setup.ApplyIRActiveConditionalFormat tbl
+    If isFirst Then
+        Setup.ApplyIRActiveConditionalFormat tbl
+        Setup.ApplyIRSourceDropdown tbl
+    End If
 End Sub
 
 Private Sub RefreshHistoryActions(ByVal tbl As ListObject)

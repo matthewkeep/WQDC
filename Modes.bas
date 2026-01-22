@@ -1,13 +1,13 @@
 Option Explicit
 ' Modes: Simulation step functions.
-' Dependencies: Core
+' Dependencies: Core, Schema
 
 ' ==== Public Dispatcher =======================================================
 
 Public Function Step(ByRef s As State, ByRef cfg As Config, ByVal rainVol As Double) As State
     Select Case UCase$(cfg.Mode)
-        Case "SIMPLE": Step = StepSimple(s, cfg, rainVol)
-        Case "TWOBUCKET": Step = StepTwoBucket(s, cfg, rainVol)
+        Case UCase$(Schema.MIXING_SIMPLE): Step = StepSimple(s, cfg, rainVol)
+        Case UCase$(Schema.MIXING_TWOBUCKET): Step = StepTwoBucket(s, cfg, rainVol)
         Case Else: Step = StepSimple(s, cfg, rainVol)
     End Select
 End Function

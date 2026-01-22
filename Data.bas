@@ -1,6 +1,6 @@
 Option Explicit
 ' Data: Worksheet I/O.
-' Dependencies: Core, Schema, Telemetry
+' Dependencies: Core, Schema, Telemetry, Helpers
 
 ' ==== Site Access ===========================================================
 
@@ -136,9 +136,9 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
 
         ' Set mixing model
         If UCase$(mixingModel) = UCase$(Schema.MIXING_TWOBUCKET) Then
-            cfg.Mode = "TwoBucket"
+            cfg.Mode = Schema.MIXING_TWOBUCKET
         Else
-            cfg.Mode = "Simple"
+            cfg.Mode = Schema.MIXING_SIMPLE
         End If
 
         ' Set rainfall mode (applied per-day in Sim.Run)
@@ -149,7 +149,7 @@ Public Function LoadConfig(ByVal site As String, ByVal runType As String) As Con
         If cfg.RainFactor = 0 Then cfg.RainFactor = 1  ' Default 1:1
     Else
         ' Standard: Simple mode, no rainfall, no calibration
-        cfg.Mode = "Simple"
+        cfg.Mode = Schema.MIXING_SIMPLE
         cfg.RainfallMode = Schema.RAINFALL_OFF
     End If
 

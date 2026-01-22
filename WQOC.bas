@@ -28,8 +28,9 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
     Dim s As State, sOriginal As State, logState As State
     Dim cfgStd As Config, cfgEnh As Config
     Dim rStd As Result, rEnh As Result
-    Dim runId As String
+    Dim runId As String, runDate As Date
     Dim site As String, cm As XlCalculation
+    Dim wsInput As Worksheet
     Dim enhancedMode As Boolean, telemCalEnabled As Boolean, i As Long
 
     ' Pre-flight validation
@@ -65,29 +66,33 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
     sOriginal = s  ' Save original for History (before TelemCal/Hidden modifications)
     cfgStd = Data.LoadConfig(site, "Standard")
 
-    ' Validate: Run date must not be before sample date
-    Dim runDate As Date, wsInput As Worksheet
+    ' Get run date and validate it's not before sample date
     Set wsInput = Helpers.GetSheet(Schema.SHEET_INPUT)
     If Not wsInput Is Nothing Then
         runDate = Helpers.GetDateVal(wsInput, Schema.NAME_RUN_DATE)
-        If runDate > 0 And cfgStd.StartDate > 0 And runDate < cfgStd.StartDate Then
-            MsgBox "Run date (" & Format$(runDate, "d-mmm-yyyy") & ") cannot be before sample date (" & _
-                   Format$(cfgStd.StartDate, "d-mmm-yyyy") & ").", vbExclamation, "WQOC"
-            GoTo Cleanup
-        End If
     End If
+    If runDate > 0 And cfgStd.StartDate > 0 And runDate < cfgStd.StartDate Then
+        MsgBox "Run date (" & Format$(runDate, "d-mmm-yyyy") & ") cannot be before sample date (" & _
+               Format$(cfgStd.StartDate, "d-mmm-yyyy") & ").", vbExclamation, "WQOC"
+        GoTo Cleanup
+    End If
+    Helpers.ExtendForecastToRunDate cfgStd, runDate
+
+    ' Check if Enhanced mode is enabled (before running, to know if we should clear)
+    enhancedMode = (UCase$(Data.GetEnhancedMode()) = "ON")
+
+    ' Clear Enhanced columns if running Standard-only (removes stale data from previous Enhanced runs)
+    If Not enhancedMode Then SimLog.ClearEnhancedColumns site
 
     ' Run Standard simulation
     rStd = Sim.Run(s, cfgStd)
     SimLog.WriteLog rStd, cfgStd, runId, site, "Standard"
     Data.SaveResult rStd, "Standard"
 
-    ' Check if Enhanced mode is enabled
-    enhancedMode = (UCase$(Data.GetEnhancedMode()) = "ON")
-
     ' Run Enhanced if enabled
     If enhancedMode Then
         cfgEnh = Data.LoadConfig(site, "Enhanced")
+        Helpers.ExtendForecastToRunDate cfgEnh, runDate
 
         ' Apply telemetry calibration (snap to latest observed values) if enabled
         telemCalEnabled = Data.GetTelemCalEnabled()
@@ -97,7 +102,7 @@ Private Sub RunCore(ByVal existingRunId As String, ByVal recordHistory As Boolea
 
         ' Load hidden layer from log for TwoBucket continuity
         ' Priority: 1) Log at sample date, 2) Inputs sheet, 3) Initialize at equilibrium
-        If cfgEnh.Mode = "TwoBucket" Then
+        If cfgEnh.Mode = Schema.MIXING_TWOBUCKET Then
             logState = Data.LoadHiddenFromLog(site, cfgEnh.StartDate)
             If logState.Hidden(mEC) > Core.EPS Then
                 ' Found hidden state in log - use it
@@ -163,7 +168,7 @@ End Function
 
 ' ==== Chart Generation =======================================================
 
-Private Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByVal hasEnhanced As Boolean)
+Public Sub GenerateCharts(ByVal site As String, ByRef cfg As Config, ByVal hasEnhanced As Boolean)
     ' Generates 7 charts (one per chemistry metric) bound to table columns
     ' EC chart: Dual-axis with Volume; other charts: single-analyte only
     ' Charts created once per site, auto-update when table data changes

@@ -24,7 +24,7 @@ Scenarios.RunAll         ' 6 regression scenarios
 ```
 WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.bas
           ├─ Telemetry.bas ─── Helpers.bas ── Schema.bas
-          ├─ Sim.bas ───────── Modes.bas ──── Core.bas
+          ├─ Sim.bas ───────── Modes.bas ──── Core.bas, Schema.bas
           ├─ History.bas ───── SimLog.bas ─── Helpers.bas
           ├─ Loader.bas ────── Helpers.bas
           ├─ Events.bas ────── Helpers.bas
@@ -60,7 +60,7 @@ WQOC.bas ─┬─ Data.bas ──────── Helpers.bas ── Schema.b
 | **Events.bas** | Worksheet handlers, double-click toggles, date validation |
 | **WQOC.bas** | Entry point, orchestration, chart generation |
 | **Schema.bas** | Constants only (names, colors, defaults) |
-| **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, styling, range access) |
+| **Helpers.bas** | Utilities (ColIdx, GetSheet, GetTable, serialization, range access) |
 | **Error.bas** | Centralized error handling (Trace, TraceErr, DEBUG_ON toggle) |
 | **Setup.bas** | Scaffolding, table creation, dropdowns, conditional formatting |
 | **Backtest.bas** | Season replay for A/B comparison |
@@ -162,6 +162,9 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
 | History/SimLog | Share RunId for rollback coordination |
 | Helper functions | Use `Helpers.*` not `Schema.*` |
 | Conditional format order | Apply Enhanced last (highest priority) |
+| Mixing mode strings | Use `Schema.MIXING_SIMPLE`, `Schema.MIXING_TWOBUCKET` |
+| Dropdown validation | Uses `INDIRECT("tblName[colName]")` - column names must match exactly |
+| Table column names | Use Schema constants for both table creation AND column lookups |
 
 ## Per-Site Architecture
 
@@ -177,11 +180,15 @@ See `.claude/agents/_gotchas.md` for full list. Key ones:
   - Row shading: Sample date = light cyan, Run date = light green
   - Triggered values: Red + bold formatting on triggered metric cell
 - **History table structure:**
-  - Columns (14 bundled): RunId, Timestamp, RunDate, SampleDate, ResChemistry, IRSnapshot, Triggers, StdResult, EnhResult, EnhSettings, HiddenMass, SignName, Action, Load
-  - Bundled columns: Triggers=`Vol|EC|...|TAN`, StdResult/EnhResult=`Days|Metric`, EnhSettings=`Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac`
+  - Columns (15): RunId, Timestamp, RunDate, SampleDate, Outflow, ResChemistry, IRSnapshot, Triggers, StdResult, EnhResult, EnhSettings, HiddenMass, SignName, Action, Load
+  - Bundled columns: Triggers=`Vol|EC|...|TAN|Preset`, StdResult/EnhResult=`Days|Metric`, EnhSettings=`Enabled|TelemCal|RainfallMode|RainFactor|MixingModel|Tau|SurfaceFrac`
   - One row per run (captures both Std and Enh results; Enh columns blank when disabled)
   - Action column: "Current" (latest) or "Rollback" (older runs)
   - Load column: Click to restore settings without rollback
+- **RRState table structure (aligned with History):**
+  - Columns (12): Site, RunDate, SampleDate, Outflow, ResChemistry, IRSnapshot, Triggers, EnhSettings, HiddenMass, SignName, PredView, LastModified
+  - Bundled columns: ResChemistry=`Vol|EC|...|TAN`, Triggers=`Vol|EC|...|TAN|Preset`, PredView=`Vol|EC|...|TAN|Mode`
+  - One row per site (upsert on site switch)
 - **Telemetry table:** Located on Results sheet at column L (tblTelemetry)
 - **Telemetry columns per site:** `EC (RP1)`, `Vol (RP1)` (Rain is global)
 - **RunId format:** `{site}_{seq}` (e.g., `RP1_001`)
@@ -282,9 +289,8 @@ These patterns have been verified across the entire codebase. Follow them exactl
 Set tbl = Helpers.GetTable(...)
 If tbl Is Nothing Then Exit Sub
 
-' Data body access
+' Data body access (preferred)
 If Not Helpers.HasData(tbl) Then Exit Sub
-' OR: If tbl.DataBodyRange Is Nothing Then Exit Sub
 
 ' Named range access
 On Error Resume Next

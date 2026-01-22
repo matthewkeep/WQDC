@@ -1,22 +1,28 @@
 Option Explicit
 ' Backtest: Season replay for prediction validation.
-' Dependencies: Core, Schema, Data, Sim, Telemetry, Setup
+' Dependencies: Core, Schema, Data, Sim, SimLog, History, Loader, Telemetry, Setup
 '
 ' Runs both Standard and Enhanced modes for A/B comparison:
 ' - Standard: Simple mixing, independent runs (no state carryover)
 ' - Enhanced: Uses configured settings, hidden layer carries forward
+'
+' Writes to tblLive (charts auto-update) and tblHistory (audit trail).
+' SeasonLog kept for error metrics analysis.
 
 ' ==== Entry Point ==============================================================
 
 Public Sub RunSeason()
     ' Backtests all RR samples for current site using both Standard and Enhanced
-    ' Simulates weekly operational workflow with progressive hidden layer
+    ' Simulates weekly operational workflow: Run Date = Sample Date + 7
+    ' Writes to Live/History tables so charts update automatically
     Dim site As String, samples As Variant
     Dim i As Long, n As Long, predictDay As Long, cm As XlCalculation
     Dim sStd As State, sEnh As State, cfgStd As Config, cfgEnh As Config
     Dim rStd As Result, rEnh As Result
     Dim results() As Variant
     Dim enhancedMode As Boolean, telemCalEnabled As Boolean
+    Dim wsInput As Worksheet, runId As String, runSeq As Long
+    Dim sampleDate As Date, runDate As Date, dayOffset As Long
 
     site = Data.GetSite()
     If Len(site) = 0 Then
@@ -40,74 +46,108 @@ Public Sub RunSeason()
     enhancedMode = (UCase$(Data.GetEnhancedMode()) = "ON")
     telemCalEnabled = Data.GetTelemCalEnabled()
 
+    Set wsInput = Helpers.GetSheet(Schema.SHEET_INPUT)
+    If wsInput Is Nothing Then Exit Sub
+
     On Error GoTo Cleanup
     cm = Application.Calculation
     Application.ScreenUpdating = False
     Application.EnableEvents = False
     Application.Calculation = xlCalculationManual
 
-    ' Ensure season log table exists and clear it
+    ' Ensure tables exist and clear season log
+    Setup.EnsureSiteLiveTable site
+    Setup.EnsureSiteHistoryTable site
     Setup.EnsureSeasonLogTable site
     ClearSeasonLog site
+
+    ' Clear Enhanced columns if running Standard-only (removes stale data from previous Enhanced runs)
+    If Not enhancedMode Then SimLog.ClearEnhancedColumns site
+
+    ' Get starting run sequence from history count
+    runSeq = History.CountRuns(site)
 
     ' Results: RunDate, SampleDate, ActualEC, ActualVol, StdPredEC, StdErrEC, StdPredVol, StdErrVol, EnhPredEC, EnhErrEC, EnhPredVol, EnhErrVol
     ReDim results(1 To n - 1, 1 To 12)
 
-    ' Initialize Enhanced hidden state at equilibrium from first sample
-    sEnh = LoadStateAtDate(site, samples(1, 1))
-    sEnh = Core.InitHiddenAtEquilibrium(sEnh)
-
     For i = 1 To n - 1
-        ' === Standard Run (independent each time) ===
-        sStd = LoadStateAtDate(site, samples(i, 1))
-        cfgStd = LoadConfigForBacktest(site, samples(i, 1), "Standard")
-        cfgStd.StartDate = samples(i, 1) + 7
+        sampleDate = samples(i, 1)
+        runDate = sampleDate + 7  ' Simulates lab delay
+
+        ' === Set dates and refresh data ===
+        SetBacktestDates wsInput, sampleDate, runDate
+        Loader.LoadLatestInternal site, sampleDate
+
+        ' === Generate RunId ===
+        runSeq = runSeq + 1
+        runId = site & "_" & Format$(runSeq, "000")
+
+        ' === Load state and config from Inputs sheet ===
+        sStd = Data.LoadState()
+
+        ' === Standard Run (Simple mode, no rainfall) ===
+        cfgStd = Data.LoadConfig(site, "Standard")
+        cfgStd.StartDate = sampleDate
+        Helpers.ExtendForecastToRunDate cfgStd, runDate
         rStd = Sim.Run(sStd, cfgStd)
+        SimLog.WriteLog rStd, cfgStd, runId, site, "Standard"
 
-        ' === Enhanced Run (carries hidden state forward) ===
+        ' === Enhanced Run (if enabled) ===
         If enhancedMode Then
-            ' Load visible state from observed data
-            sEnh = LoadStateAtDate(site, samples(i, 1))
+            ' Start with visible layer from observed data
+            sEnh = Data.LoadState()
 
-            ' Apply telemetry calibration if enabled (snap visible layer)
+            ' Apply telemetry calibration if enabled
             If telemCalEnabled Then
-                sEnh = SnapVisibleLayer(sEnh, site, samples(i, 1))
+                sEnh = SnapVisibleLayer(sEnh, site, sampleDate)
             End If
 
-            ' Preserve hidden layer from previous run (or equilibrium if first)
-            If i > 1 Then
-                ' Use hidden state from end of previous Enhanced run
-                sEnh = CarryHiddenFromPrevious(sEnh, rEnh.FinalState)
+            ' Initialize hidden layer (must happen AFTER LoadState)
+            If i = 1 Then
+                ' First run: initialize at equilibrium
+                sEnh = Core.InitHiddenAtEquilibrium(sEnh)
+            Else
+                ' Subsequent runs: carry hidden from previous run at actual time offset
+                ' (not from day 100 - use the day matching real elapsed time)
+                dayOffset = samples(i, 1) - samples(i - 1, 1)
+                If dayOffset < 0 Then dayOffset = 0
+                If dayOffset > UBound(rEnh.Snaps) Then dayOffset = UBound(rEnh.Snaps)
+                sEnh = CarryHiddenFromPrevious(sEnh, rEnh.Snaps(dayOffset))
             End If
 
-            cfgEnh = LoadConfigForBacktest(site, samples(i, 1), "Enhanced")
-            cfgEnh.StartDate = samples(i, 1) + 7
+            cfgEnh = Data.LoadConfig(site, "Enhanced")
+            cfgEnh.StartDate = sampleDate
+            Helpers.ExtendForecastToRunDate cfgEnh, runDate
             rEnh = Sim.Run(sEnh, cfgEnh)
+            SimLog.WriteLog rEnh, cfgEnh, runId, site, "Enhanced"
         End If
 
-        ' Calculate prediction day (when next sample occurs)
-        predictDay = samples(i + 1, 1) - (samples(i, 1) + 7)
+        ' === Record to History ===
+        History.RecordRun sStd, cfgStd, rStd, cfgEnh, rEnh, enhancedMode, telemCalEnabled, runId, site
+
+        ' === Calculate error metrics for SeasonLog ===
+        ' predictDay is snap index (days from sampleDate/StartDate, not runDate)
+        predictDay = CLng(samples(i + 1, 1) - sampleDate)
         If predictDay < 0 Then predictDay = 0
         If predictDay > UBound(rStd.Snaps) Then predictDay = UBound(rStd.Snaps)
 
-        ' Record results
-        results(i, 1) = Date                                      ' RunDate
-        results(i, 2) = samples(i, 1)                             ' SampleDate
-        results(i, 3) = samples(i + 1, 2)                         ' ActualEC (next sample)
-        results(i, 4) = samples(i + 1, 3)                         ' ActualVol (next sample)
+        results(i, 1) = runDate                                      ' RunDate
+        results(i, 2) = sampleDate                                   ' SampleDate
+        results(i, 3) = samples(i + 1, 2)                            ' ActualEC (next sample)
+        results(i, 4) = samples(i + 1, 3)                            ' ActualVol (next sample)
 
         ' Standard predictions
-        results(i, 5) = rStd.Snaps(predictDay).Chem(mEC)           ' StdPredEC
-        results(i, 6) = results(i, 5) - results(i, 3)             ' StdErrEC
-        results(i, 7) = rStd.Snaps(predictDay).Vol                ' StdPredVol
-        results(i, 8) = results(i, 7) - results(i, 4)             ' StdErrVol
+        results(i, 5) = rStd.Snaps(predictDay).Chem(mEC)             ' StdPredEC
+        results(i, 6) = results(i, 5) - results(i, 3)                ' StdErrEC
+        results(i, 7) = rStd.Snaps(predictDay).Vol                   ' StdPredVol
+        results(i, 8) = results(i, 7) - results(i, 4)                ' StdErrVol
 
         ' Enhanced predictions (if enabled)
         If enhancedMode Then
-            results(i, 9) = rEnh.Snaps(predictDay).Chem(mEC)       ' EnhPredEC
-            results(i, 10) = results(i, 9) - results(i, 3)        ' EnhErrEC
-            results(i, 11) = rEnh.Snaps(predictDay).Vol           ' EnhPredVol
-            results(i, 12) = results(i, 11) - results(i, 4)       ' EnhErrVol
+            results(i, 9) = rEnh.Snaps(predictDay).Chem(mEC)         ' EnhPredEC
+            results(i, 10) = results(i, 9) - results(i, 3)           ' EnhErrEC
+            results(i, 11) = rEnh.Snaps(predictDay).Vol              ' EnhPredVol
+            results(i, 12) = results(i, 11) - results(i, 4)          ' EnhErrVol
         Else
             results(i, 9) = Empty: results(i, 10) = Empty
             results(i, 11) = Empty: results(i, 12) = Empty
@@ -115,6 +155,9 @@ Public Sub RunSeason()
     Next i
 
     WriteSeasonLog site, results
+
+    ' Generate/update charts
+    WQOC.GenerateCharts site, cfgStd, enhancedMode
 
     Application.Calculation = cm
     Application.ScreenUpdating = True
@@ -129,7 +172,10 @@ Public Sub RunSeason()
     Else
         msg = msg & "Enhanced: Off (enable to compare)"
     End If
-    msg = msg & vbNewLine & vbNewLine & "Results in SeasonLog table on Log sheet."
+    msg = msg & vbNewLine & vbNewLine & "Results written to:" & vbNewLine
+    msg = msg & "- tblLive_" & site & " (charts)" & vbNewLine
+    msg = msg & "- tblHistory_" & site & " (audit)" & vbNewLine
+    msg = msg & "- tblSeasonLog_" & site & " (errors)"
     MsgBox msg, vbInformation, "Backtest"
     Exit Sub
 
@@ -146,7 +192,7 @@ End Sub
 ' ==== Hidden Layer Management ==================================================
 
 Private Function CarryHiddenFromPrevious(ByRef current As State, ByRef previous As State) As State
-    ' Preserves hidden layer from previous run's final state
+    ' Copies hidden layer from previous state to current (visible unchanged)
     Dim result As State, i As Long
     result = Core.CopyState(current)
     For i = 1 To Core.METRIC_COUNT
@@ -208,7 +254,7 @@ Private Function GetAllSamples(ByVal site As String) As Variant
     i = 1
     Dim k As Variant, arr As Variant
     For Each k In dict.Keys
-        arr = dict(k)
+        arr = dict.Item(k)
         dates(i) = arr(0)
         ecs(i) = arr(1)
         vol = Telemetry.GetLatestVol(arr(0), site)
@@ -243,146 +289,6 @@ Private Sub SortByDate(ByRef dates() As Date, ByRef ecs() As Double, ByRef vols(
         Next j
     Next i
 End Sub
-
-Private Function LoadStateAtDate(ByVal site As String, ByVal sampleDate As Date) As State
-    ' Loads state from tblResults at specific date
-    Dim s As State, tbl As ListObject, row As ListRow
-    Dim rowDate As Date, vol As Variant
-    Dim chem As Variant, i As Long
-
-    Set tbl = GetResultsTable()
-    If tbl Is Nothing Then Exit Function
-
-    chem = Schema.ChemistryNames()
-
-    For Each row In tbl.ListRows
-        If Helpers.MatchesSite(row.Range.Cells(1, 1).Value, site) Then
-            On Error Resume Next
-            rowDate = CDate(row.Range.Cells(1, 2).Value)
-            On Error GoTo 0
-
-            If rowDate = sampleDate Then
-                For i = 0 To Core.METRIC_COUNT - 1
-                    s.Chem(i + 1) = Val(row.Range.Cells(1, Helpers.ColIdx(tbl, chem(i))).Value)
-                Next i
-
-                vol = Telemetry.GetLatestVol(sampleDate, site)
-                If Not IsEmpty(vol) Then s.Vol = CDbl(vol)
-
-                Exit For
-            End If
-        End If
-    Next row
-
-    LoadStateAtDate = s
-End Function
-
-Private Function LoadConfigForBacktest(ByVal site As String, ByVal beforeDate As Date, ByVal runType As String) As Config
-    ' Loads config with IR chemistry from before the given date
-    Dim cfg As Config, tblIdx As ListObject, tblRes As ListObject
-    Dim idxRow As ListRow, irSite As String, flow As Double
-    Dim labData As Variant, chem As Variant, i As Long
-    Dim mixingModel As String, rainfallMode As String
-
-    cfg.Site = site
-    cfg.Days = Schema.DEFAULT_FORECAST_DAYS
-    cfg.Tau = Val(GetInputVal(Schema.NAME_TAU))
-    cfg.Outflow = Val(GetInputVal(Schema.NAME_OUTPUT))
-    cfg.SurfaceFrac = Val(GetInputVal(Schema.NAME_SURFACE_FRACTION))
-    If cfg.SurfaceFrac = 0 Then cfg.SurfaceFrac = Schema.DEFAULT_SURFACE_FRACTION
-
-    ' Load triggers
-    cfg.TriggerVol = Val(GetInputVal(Schema.NAME_TRIGGER_VOL))
-    Dim rng As Range
-    On Error Resume Next
-    Set rng = ThisWorkbook.Worksheets(Schema.SHEET_INPUT).Range(Schema.NAME_LIMIT_ROW)
-    If Not rng Is Nothing Then
-        For i = 1 To Core.METRIC_COUNT
-            If i <= rng.Columns.Count Then cfg.TriggerChem(i) = Val(rng.Cells(1, i).Value)
-        Next i
-    End If
-    On Error GoTo 0
-
-    ' Mode-specific settings
-    If UCase$(runType) = "ENHANCED" Then
-        mixingModel = GetInputVal(Schema.NAME_MIXING_MODEL)
-        rainfallMode = GetInputVal(Schema.NAME_RAINFALL_MODE)
-
-        If UCase$(mixingModel) = UCase$(Schema.MIXING_TWOBUCKET) Then
-            cfg.Mode = "TwoBucket"
-        Else
-            cfg.Mode = "Simple"
-        End If
-        cfg.RainfallMode = rainfallMode
-    Else
-        cfg.Mode = "Simple"
-        cfg.RainfallMode = Schema.RAINFALL_OFF
-    End If
-
-    ' Load IR flows and chemistry
-    Set tblIdx = GetIndexTable()
-    Set tblRes = GetResultsTable()
-    If tblIdx Is Nothing Or tblRes Is Nothing Then
-        LoadConfigForBacktest = cfg
-        Exit Function
-    End If
-
-    chem = Schema.ChemistryNames()
-
-    For Each idxRow In tblIdx.ListRows
-        If Helpers.MatchesSite(idxRow.Range.Cells(1, 1).Value, site) Then
-            irSite = Trim$(idxRow.Range.Cells(1, 2).Value)
-            flow = Val(idxRow.Range.Cells(1, 3).Value)
-
-            labData = GetLabDataBeforeDate(irSite, beforeDate, tblRes, chem)
-
-            If Not IsEmpty(labData) Then
-                cfg.Inflow = cfg.Inflow + flow
-                For i = 1 To Core.METRIC_COUNT
-                    cfg.InflowChem(i) = cfg.InflowChem(i) + flow * labData(i)
-                Next i
-            End If
-        End If
-    Next idxRow
-
-    If cfg.Inflow > Core.EPS Then
-        For i = 1 To Core.METRIC_COUNT
-            cfg.InflowChem(i) = cfg.InflowChem(i) / cfg.Inflow
-        Next i
-    End If
-
-    LoadConfigForBacktest = cfg
-End Function
-
-Private Function GetLabDataBeforeDate(ByVal irSite As String, ByVal beforeDate As Date, _
-                                      ByVal tbl As ListObject, ByVal chem As Variant) As Variant
-    Dim row As ListRow, rowDate As Date
-    Dim latestDate As Date, latestRow As ListRow
-    Dim result() As Double, i As Long
-
-    latestDate = 0
-    For Each row In tbl.ListRows
-        If Helpers.MatchesSite(row.Range.Cells(1, 1).Value, irSite) Then
-            On Error Resume Next
-            rowDate = CDate(row.Range.Cells(1, 2).Value)
-            On Error GoTo 0
-
-            If rowDate > 0 And rowDate < beforeDate And rowDate > latestDate Then
-                latestDate = rowDate
-                Set latestRow = row
-            End If
-        End If
-    Next row
-
-    If latestRow Is Nothing Then Exit Function
-
-    ReDim result(1 To Core.METRIC_COUNT)
-    For i = 0 To Core.METRIC_COUNT - 1
-        result(i + 1) = Val(latestRow.Range.Cells(1, Helpers.ColIdx(tbl, chem(i))).Value)
-    Next i
-
-    GetLabDataBeforeDate = result
-End Function
 
 ' ==== Season Log Output ========================================================
 
@@ -429,24 +335,19 @@ Private Function GetResultsTable() As ListObject
     On Error GoTo 0
 End Function
 
-Private Function GetIndexTable() As ListObject
-    Dim ws As Worksheet
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_CONFIG)
-    If Not ws Is Nothing Then Set GetIndexTable = ws.ListObjects(Schema.TABLE_INDEX)
-    On Error GoTo 0
-End Function
-
 Private Function GetSeasonLogTable(ByVal site As String) As ListObject
-    Dim ws As Worksheet, tblName As String
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    tblName = Helpers.SeasonLogTableName(site)
-    If Not ws Is Nothing Then Set GetSeasonLogTable = ws.ListObjects(tblName)
-    On Error GoTo 0
+    Set GetSeasonLogTable = Helpers.GetSiteTable(Schema.SHEET_LOG, Schema.SEASONLOG_TABLE_PREFIX, site)
 End Function
 
 ' ==== Helpers ==================================================================
+
+Private Sub SetBacktestDates(ByVal ws As Worksheet, ByVal sampleDate As Date, ByVal runDate As Date)
+    ' Sets Sample Date and Run Date in Inputs sheet for backtest iteration
+    On Error Resume Next
+    ws.Range(Schema.NAME_SAMPLE_DATE).Value = sampleDate
+    ws.Range(Schema.NAME_RUN_DATE).Value = runDate
+    On Error GoTo 0
+End Sub
 
 Private Function GetInputVal(ByVal nm As String) As String
     Dim ws As Worksheet
@@ -455,4 +356,3 @@ Private Function GetInputVal(ByVal nm As String) As String
     If Not ws Is Nothing Then GetInputVal = CStr(ws.Range(nm).Value)
     On Error GoTo 0
 End Function
-

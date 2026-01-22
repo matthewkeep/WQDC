@@ -37,7 +37,7 @@ End Function
 
 Public Function SeasonLogTableName(ByVal site As String) As String
     ' Returns table name for site's season backtest table (e.g., "tblSeasonLog_RP1")
-    SeasonLogTableName = "tblSeasonLog_" & site
+    SeasonLogTableName = Schema.SEASONLOG_TABLE_PREFIX & site
 End Function
 
 ' ==== Worksheet/Table Access ====================================================
@@ -60,24 +60,24 @@ Public Function GetTable(ByVal sheetName As String, ByVal tableName As String) A
     End If
 End Function
 
-Public Function WithTableData(ByVal sheetName As String, ByVal tableName As String) As ListObject
-    ' Returns table only if it exists AND has data rows, else Nothing
-    ' Replaces the common pattern:
-    '   Set tbl = GetTable(...): If tbl Is Nothing Then Exit
-    '   If tbl.DataBodyRange Is Nothing Then Exit
-    Dim tbl As ListObject
-    Set tbl = GetTable(sheetName, tableName)
-    If tbl Is Nothing Then Exit Function
-    If tbl.DataBodyRange Is Nothing Then Exit Function
-    Set WithTableData = tbl
-End Function
-
 Public Function HasData(ByVal tbl As ListObject) As Boolean
     ' Returns True if table exists and has data rows
     ' Use: If Not HasData(tbl) Then Exit Function
     If tbl Is Nothing Then Exit Function
     If tbl.DataBodyRange Is Nothing Then Exit Function
     HasData = True
+End Function
+
+Public Function IsInTableColumn(ByVal Target As Range, ByVal sheetName As String, _
+                                 ByVal tableName As String, ByVal colName As String) As Boolean
+    ' Returns True if Target is in the specified table column's data body
+    Dim tbl As ListObject, col As Long
+    Set tbl = GetTable(sheetName, tableName)
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    col = ColIdx(tbl, colName)
+    If col = 0 Then Exit Function
+    IsInTableColumn = Not Intersect(Target, tbl.DataBodyRange.Columns(col)) Is Nothing
 End Function
 
 Public Function MatchesSite(ByVal v As Variant, ByVal site As String) As Boolean
@@ -256,22 +256,25 @@ Public Sub DeserializeIRTable(ByVal str As String, ByVal tbl As ListObject)
 End Sub
 
 ' ==== Bundled Column Serialization ==============================================
+' Generic Vol|Chem[7]|Suffix format used by Triggers and PredView
 
-Public Function SerializeTriggers(ByVal vol As Double, ByVal chemRng As Range) As String
-    ' Serializes Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN (8 values)
-    Dim i As Long, parts(0 To 7) As String
+Public Function SerializeVolChem(ByVal vol As Double, ByVal chemRng As Range, Optional ByVal suffix As String = "") As String
+    ' Serializes: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN|Suffix (9 values)
+    Dim i As Long, parts(0 To 8) As String
     parts(0) = CStr(vol)
     If Not chemRng Is Nothing Then
         For i = 1 To Core.METRIC_COUNT
             parts(i) = CStr(Val(chemRng.Cells(1, i).Value))
         Next i
     End If
-    SerializeTriggers = Join(parts, "|")
+    parts(8) = suffix
+    SerializeVolChem = Join(parts, "|")
 End Function
 
-Public Sub DeserializeTriggers(ByVal str As String, ByRef vol As Double, ByVal chemRng As Range)
-    ' Deserializes Triggers: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN
+Public Sub DeserializeVolChem(ByVal str As String, ByRef vol As Double, ByVal chemRng As Range, Optional ByRef suffix As String)
+    ' Deserializes: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN|Suffix
     Dim parts() As String, i As Long
+    vol = 0: suffix = ""
     If Len(str) = 0 Then Exit Sub
     parts = Split(str, "|")
     If UBound(parts) >= 0 Then vol = Val(parts(0))
@@ -280,6 +283,7 @@ Public Sub DeserializeTriggers(ByVal str As String, ByRef vol As Double, ByVal c
             If UBound(parts) >= i Then chemRng.Cells(1, i).Value = Val(parts(i))
         Next i
     End If
+    If UBound(parts) >= 8 Then suffix = parts(8)
 End Sub
 
 Public Function SerializeResult(ByVal day As Long, ByVal metric As String) As String
@@ -357,3 +361,66 @@ Public Sub DeserializeEnhSettingsState(ByVal str As String, ByVal ws As Workshee
     If UBound(parts) >= 5 Then WriteToRange ws, Schema.NAME_TAU, Val(parts(5))
     If UBound(parts) >= 6 Then WriteToRange ws, Schema.NAME_SURFACE_FRACTION, Val(parts(6))
 End Sub
+
+Public Function SerializeStateArray(ByRef arr() As Double) As String
+    ' Serializes State.Chem or State.Hidden array (1-based) to pipe-delimited string
+    Dim i As Long, parts() As String
+    ReDim parts(0 To Core.METRIC_COUNT - 1)
+    For i = 1 To Core.METRIC_COUNT
+        parts(i - 1) = CStr(arr(i))
+    Next i
+    SerializeStateArray = Join(parts, "|")
+End Function
+
+Public Function SerializeTriggerConfig(ByRef cfg As Config, Optional ByVal preset As String = "") As String
+    ' Serializes triggers from Config: Vol|EC|F_U|F_Mn|SO4|Mg|Ca|TAN|Preset
+    Dim i As Long, parts(0 To 8) As String
+    parts(0) = CStr(cfg.TriggerVol)
+    For i = 1 To Core.METRIC_COUNT
+        parts(i) = CStr(cfg.TriggerChem(i))
+    Next i
+    parts(8) = preset
+    SerializeTriggerConfig = Join(parts, "|")
+End Function
+
+Public Sub ExtendForecastToRunDate(ByRef cfg As Config, ByVal runDate As Date)
+    ' Extends cfg.Days so forecast covers DEFAULT_FORECAST_DAYS from run date
+    ' If run date equals sample date, no change needed (already 100 days)
+    ' If run date is after sample date, extends by the gap
+    If runDate > 0 And cfg.StartDate > 0 And runDate > cfg.StartDate Then
+        cfg.Days = CLng(runDate - cfg.StartDate) + Schema.DEFAULT_FORECAST_DAYS
+    End If
+End Sub
+
+' ==== Table Cell Access =====================================================
+
+Public Sub WriteCell(ByVal tbl As ListObject, ByVal row As ListRow, ByVal colName As String, ByVal v As Variant)
+    ' Writes value to table cell by column name
+    Dim col As Long: col = ColIdx(tbl, colName)
+    If col > 0 Then row.Range.Cells(1, col).Value = v
+End Sub
+
+Public Function ReadCell(ByVal tbl As ListObject, ByVal rowIdx As Long, ByVal colName As String) As Variant
+    ' Reads value from table cell by column name and row index
+    Dim col As Long: col = ColIdx(tbl, colName)
+    If col > 0 Then ReadCell = tbl.DataBodyRange.Cells(rowIdx, col).Value
+End Function
+
+Public Function ReadCellStr(ByVal tbl As ListObject, ByVal rowIdx As Long, ByVal colName As String) As String
+    ' Reads string value from table cell (with empty string fallback)
+    ReadCellStr = CStr(ReadCell(tbl, rowIdx, colName) & "")
+End Function
+
+' ==== Site Table Access =====================================================
+
+Public Function GetSiteTable(ByVal sheetName As String, ByVal tablePrefix As String, ByVal site As String) As ListObject
+    ' Returns site-specific table (tblLive_RP1, tblHistory_RP1, etc.)
+    ' Does not create table - caller should call Setup.Ensure* if Nothing returned
+    Dim ws As Worksheet, tblName As String
+    Set ws = GetSheet(sheetName)
+    If ws Is Nothing Then Exit Function
+    tblName = tablePrefix & site
+    On Error Resume Next
+    Set GetSiteTable = ws.ListObjects(tblName)
+    On Error GoTo 0
+End Function

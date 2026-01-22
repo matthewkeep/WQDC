@@ -59,22 +59,43 @@ Public Const TABLE_INDEX As String = "tblIndex"
 Public Const TABLE_TRIGGERS As String = "tblTriggers"
 Public Const TABLE_USERS As String = "tblUsers"
 
+' Results table columns
+Public Const RESULTS_COL_SITE As String = "Site"
+Public Const RESULTS_COL_DATE As String = "Sample Date"
+
+' Index table columns
+Public Const INDEX_COL_SITE As String = "RR"
+Public Const INDEX_COL_IR As String = "IR"
+Public Const INDEX_COL_FLOW As String = "Flow"
+
+' Triggers table columns
+Public Const TRIGGERS_COL_PRESET As String = "Preset"
+Public Const TRIGGERS_COL_VOL As String = "Volume (ML)"
+
+' Users table columns
+Public Const USERS_COL_NAME As String = "Name"
+Public Const USERS_COL_POSITION As String = "Position"
+
 ' Per-site table prefixes (tables created on-demand)
 Public Const LIVE_TABLE_PREFIX As String = "tblLive_"
 Public Const HISTORY_TABLE_PREFIX As String = "tblHistory_"
+Public Const SEASONLOG_TABLE_PREFIX As String = "tblSeasonLog_"
 
 ' RR State table (per-site settings persistence)
 Public Const TABLE_RRSTATE As String = "tblRRState"
 
-' RRState table columns (9 columns, bundled format)
+' RRState table columns (12 columns, bundled format - aligned with History)
 Public Const RRSTATE_COL_SITE As String = "Site"
+Public Const RRSTATE_COL_RUN_DATE As String = "RunDate"
 Public Const RRSTATE_COL_SAMPLE_DATE As String = "SampleDate"
+Public Const RRSTATE_COL_OUTFLOW As String = "Outflow"
 Public Const RRSTATE_COL_RES_CHEM As String = "ResChemistry"
 Public Const RRSTATE_COL_IR_SNAPSHOT As String = "IRSnapshot"
 Public Const RRSTATE_COL_TRIGGERS As String = "Triggers"
 Public Const RRSTATE_COL_ENH_SETTINGS As String = "EnhSettings"
 Public Const RRSTATE_COL_HIDDEN_MASS As String = "HiddenMass"
 Public Const RRSTATE_COL_SIGN_NAME As String = "SignName"
+Public Const RRSTATE_COL_PRED_VIEW As String = "PredView"
 Public Const RRSTATE_COL_LAST_MODIFIED As String = "LastModified"
 
 ' Live table columns (date-centric log with Std/Enh side-by-side)
@@ -97,11 +118,12 @@ Public Const IR_COL_ACTIVE As String = "Active"
 Public Const IR_COL_SAMPLE_DATE As String = "Sample Date"
 Public Const IR_COL_ACTION As String = "Add Input"
 
-' History table columns (14 columns, bundled format)
+' History table columns (15 columns, bundled format)
 Public Const HISTORY_COL_RUNID As String = "RunId"
 Public Const HISTORY_COL_TIMESTAMP As String = "Timestamp"
 Public Const HISTORY_COL_RUNDATE As String = "RunDate"
 Public Const HISTORY_COL_SAMPLE_DATE As String = "SampleDate"
+Public Const HISTORY_COL_OUTFLOW As String = "Outflow"
 Public Const HISTORY_COL_RES_CHEM As String = "ResChemistry"
 Public Const HISTORY_COL_IR_SNAPSHOT As String = "IRSnapshot"
 Public Const HISTORY_COL_TRIGGERS As String = "Triggers"

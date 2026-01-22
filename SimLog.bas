@@ -1,6 +1,6 @@
 Option Explicit
 ' SimLog: Date-centric live log with UPSERT logic.
-' Dependencies: Core, Schema, Setup, Data (for telemetry)
+' Dependencies: Core, Schema, Helpers, Setup
 '
 ' tblLive_{site}: One row per date with Std/Enh predictions side-by-side.
 ' Standard run creates/updates rows, Enhanced updates existing rows.
@@ -36,8 +36,8 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
     Dim runDate As Date
 
     Set tbl = GetLiveTable(site)
-    runDate = Date  ' Today's date for row shading
     If tbl Is Nothing Then Exit Sub
+    runDate = GetRunDate()
 
     ' Clear old trigger formatting before writing new data
     ClearTriggerFormatting tbl, "Std"
@@ -74,13 +74,13 @@ Private Sub WriteLiveStandard(ByRef r As Result, ByRef cfg As Config, ByVal runI
     ' Calculate discrepancy from telemetry
     WriteDiscrepancy tbl, site
 
-    ' Apply row shading for sample and run dates
-    ApplyRowShading tbl, cfg.StartDate, runDate
-
-    ' Format triggered cell if trigger occurred
+    ' Apply all row formatting in single pass (shading + trigger)
+    Dim triggerDate As Date, triggerMetric As String
     If r.TriggerDay <> Core.NO_TRIGGER Then
-        FormatLiveTriggerCell tbl, cfg.StartDate + r.TriggerDay, r.TriggerMetric, "Std"
+        triggerDate = cfg.StartDate + r.TriggerDay
+        triggerMetric = r.TriggerMetric
     End If
+    ApplyRowFormatting tbl, cfg.StartDate, runDate, triggerDate, triggerMetric, "Std"
 End Sub
 
 Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runId As String, ByVal site As String)
@@ -94,8 +94,7 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
 
     Set tbl = GetLiveTable(site)
     If tbl Is Nothing Then Exit Sub
-
-    runDate = Date  ' Run date is always today
+    runDate = GetRunDate()
 
     ' Clear old trigger formatting before writing new data
     ClearTriggerFormatting tbl, "Enh"
@@ -140,9 +139,9 @@ Private Sub WriteLiveEnhanced(ByRef r As Result, ByRef cfg As Config, ByVal runI
     ' Calculate discrepancy from telemetry
     WriteDiscrepancy tbl, site
 
-    ' Format triggered cell if trigger occurred
+    ' Apply Enh trigger formatting only (shading already done by Standard, preserves Std trigger box)
     If r.TriggerDay <> Core.NO_TRIGGER Then
-        FormatLiveTriggerCell tbl, cfg.StartDate + r.TriggerDay, r.TriggerMetric, "Enh"
+        ApplyTriggerFormatting tbl, cfg.StartDate + r.TriggerDay, r.TriggerMetric, "Enh"
     End If
 End Sub
 
@@ -156,8 +155,8 @@ Private Sub WriteDiscrepancy(ByVal tbl As ListObject, ByVal site As String)
     Dim enhVolCol As Long, enhECCol As Long, stdVolCol As Long, stdECCol As Long
 
     If Not Helpers.HasData(tbl) Then Exit Sub
-    Set tblTelem = Helpers.WithTableData(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
-    If tblTelem Is Nothing Then Exit Sub
+    Set tblTelem = Helpers.GetTable(Schema.SHEET_RESULTS, Schema.TABLE_TELEMETRY)
+    If Not Helpers.HasData(tblTelem) Then Exit Sub
 
     ecCol = Helpers.ColIdx(tblTelem, Helpers.TelemECColName(site))
     volCol = Helpers.ColIdx(tblTelem, Helpers.TelemVolColName(site))
@@ -208,8 +207,8 @@ End Sub
 
 Private Sub ClearTriggerFormatting(ByVal tbl As ListObject, ByVal prefix As String)
     ' Clears red+bold trigger formatting from Vol + chemistry columns for Std or Enh
-    ' Also clears row box borders
-    Dim j As Long, i As Long
+    ' Uses bulk column operations (O(1) per column, not O(n) per row)
+    Dim j As Long
     If Not Helpers.HasData(tbl) Then Exit Sub
 
     ClearColumnFormat tbl, IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
@@ -220,25 +219,10 @@ Private Sub ClearTriggerFormatting(ByVal tbl As ListObject, ByVal prefix As Stri
             ClearColumnFormat tbl, Schema.EnhChemColName(j)
         End If
     Next j
-
-    ' Clear row box borders (only on first pass - Std)
-    If prefix = "Std" Then
-        For i = 1 To tbl.ListRows.Count
-            ClearRowBorder tbl.ListRows(i).Range
-        Next i
-    End If
-End Sub
-
-Private Sub ClearRowBorder(ByVal rng As Range)
-    ' Clears outer border edges only (preserves table internal formatting)
-    rng.Borders(xlEdgeTop).LineStyle = xlNone
-    rng.Borders(xlEdgeBottom).LineStyle = xlNone
-    rng.Borders(xlEdgeLeft).LineStyle = xlNone
-    rng.Borders(xlEdgeRight).LineStyle = xlNone
 End Sub
 
 Private Sub ClearColumnFormat(ByVal tbl As ListObject, ByVal colName As String)
-    ' Clears font formatting (bold + color) from a table column
+    ' Clears font formatting (bold + color) from a table column - bulk operation
     Dim col As Long
     col = Helpers.ColIdx(tbl, colName)
     If col > 0 Then
@@ -249,36 +233,66 @@ Private Sub ClearColumnFormat(ByVal tbl As ListObject, ByVal colName As String)
     End If
 End Sub
 
-Private Sub ApplyRowShading(ByVal tbl As ListObject, ByVal sampleDate As Date, ByVal runDate As Date)
-    ' Applies background color to sample date and run date rows
+Private Sub ApplyRowFormatting(ByVal tbl As ListObject, ByVal sampleDate As Date, ByVal runDate As Date, _
+                                ByVal triggerDate As Date, ByVal triggerMetric As String, ByVal prefix As String)
+    ' Single pass: clears old formatting, applies shading + trigger formatting
+    ' Efficient: only touches rows that need changes
     Dim i As Long, rowDate As Date
+    Dim triggerCol As Long, colName As String
     If Not Helpers.HasData(tbl) Then Exit Sub
 
+    ' Get trigger column index
+    If Len(triggerMetric) > 0 Then
+        If triggerMetric = "Volume" Then
+            colName = IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
+        Else
+            colName = prefix & triggerMetric
+        End If
+        triggerCol = Helpers.ColIdx(tbl, colName)
+    End If
+
+    ' Apply shading to all rows, clear old borders
+    Dim triggerRow As Long
     For i = 1 To tbl.ListRows.Count
         rowDate = tbl.DataBodyRange.Cells(i, 1).Value
-        tbl.ListRows(i).Range.Interior.ColorIndex = xlNone  ' Clear first
+        tbl.ListRows(i).Range.Borders.LineStyle = xlNone
 
         If rowDate = sampleDate Then
             tbl.ListRows(i).Range.Interior.Color = Schema.COLOR_SAMPLE_DATE
         ElseIf rowDate = runDate Then
             tbl.ListRows(i).Range.Interior.Color = Schema.COLOR_RUN_DATE
+        Else
+            tbl.ListRows(i).Range.Interior.ColorIndex = xlNone
         End If
+
+        If rowDate = triggerDate Then triggerRow = i
     Next i
+
+    ' Apply trigger formatting last (bold + red + box)
+    If triggerRow > 0 And triggerCol > 0 Then
+        With tbl.DataBodyRange.Cells(triggerRow, triggerCol)
+            .Font.Bold = True
+            .Font.Color = Schema.COLOR_TRIGGER_FONT
+        End With
+        tbl.ListRows(triggerRow).Range.BorderAround xlContinuous, xlThin
+    End If
 End Sub
 
-Private Sub FormatLiveTriggerCell(ByVal tbl As ListObject, ByVal triggerDate As Date, _
-                                   ByVal metricName As String, ByVal prefix As String)
-    ' Formats the triggered metric cell red + bold and boxes the row
+Private Sub ApplyTriggerFormatting(ByVal tbl As ListObject, ByVal triggerDate As Date, _
+                                    ByVal triggerMetric As String, ByVal prefix As String)
+    ' Applies trigger formatting (bold + red + box) to a specific row
+    ' Used by Enhanced run to add its trigger without clearing Standard's
     Dim rowIdx As Long, colName As String, col As Long
+    If Not Helpers.HasData(tbl) Then Exit Sub
 
     rowIdx = Helpers.FindRowByDate(tbl, triggerDate)
     If rowIdx = 0 Then Exit Sub
 
     ' Build column name based on prefix and metric
-    If metricName = "Volume" Then
+    If triggerMetric = "Volume" Then
         colName = IIf(prefix = "Std", Schema.LIVE_COL_STD_VOL, Schema.LIVE_COL_ENH_VOL)
     Else
-        colName = prefix & metricName  ' e.g., "StdEC" or "EnhEC"
+        colName = prefix & triggerMetric
     End If
 
     col = Helpers.ColIdx(tbl, colName)
@@ -289,7 +303,6 @@ Private Sub FormatLiveTriggerCell(ByVal tbl As ListObject, ByVal triggerDate As 
         End With
     End If
 
-    ' Box the trigger row (outer border only)
     tbl.ListRows(rowIdx).Range.BorderAround xlContinuous, xlThin
 End Sub
 
@@ -330,6 +343,30 @@ Private Function EnsureRowForDate(ByVal tbl As ListObject, ByVal targetDate As D
     newRow.Range.Cells(1, 1).Value = targetDate
 End Function
 
+' ==== Clear Functions =======================================================
+
+Public Sub ClearEnhancedColumns(ByVal site As String)
+    ' Clears all Enhanced columns (Vol, Chem, Hidden) - used when running Standard-only
+    Dim tbl As ListObject, j As Long, col As Long
+
+    Set tbl = GetLiveTable(site)
+    If Not Helpers.HasData(tbl) Then Exit Sub
+
+    ' Clear Enhanced visible columns
+    col = Helpers.ColIdx(tbl, Schema.LIVE_COL_ENH_VOL)
+    If col > 0 Then tbl.DataBodyRange.Columns(col).ClearContents
+
+    For j = 1 To Core.METRIC_COUNT
+        col = Helpers.ColIdx(tbl, Schema.EnhChemColName(j))
+        If col > 0 Then tbl.DataBodyRange.Columns(col).ClearContents
+        col = Helpers.ColIdx(tbl, Schema.EnhHidColName(j))
+        If col > 0 Then tbl.DataBodyRange.Columns(col).ClearContents
+    Next j
+
+    ' Clear Enhanced trigger formatting
+    ClearTriggerFormatting tbl, "Enh"
+End Sub
+
 ' ==== Delete Functions ======================================================
 
 Public Sub DeleteAfterDate(ByVal cutoffDate As Date, ByVal site As String)
@@ -351,27 +388,17 @@ End Sub
 
 ' ==== Table Access ===========================================================
 
+Private Function GetRunDate() As Date
+    ' Returns run date from Inputs sheet, or today as fallback
+    GetRunDate = Helpers.GetDateVal(Helpers.GetSheet(Schema.SHEET_INPUT), Schema.NAME_RUN_DATE)
+    If GetRunDate = 0 Then GetRunDate = Date
+End Function
+
 Private Function GetLiveTable(ByVal site As String) As ListObject
     ' Returns site's live table, creating it if necessary
-    Dim ws As Worksheet, tblName As String
-
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(Schema.SHEET_LOG)
-    On Error GoTo 0
-    If ws Is Nothing Then Exit Function
-
-    tblName = Helpers.LiveTableName(site)
-
-    ' Try to get existing table
-    On Error Resume Next
-    Set GetLiveTable = ws.ListObjects(tblName)
-    On Error GoTo 0
-
-    ' Create if doesn't exist
+    Set GetLiveTable = Helpers.GetSiteTable(Schema.SHEET_LOG, Schema.LIVE_TABLE_PREFIX, site)
     If GetLiveTable Is Nothing Then
         Setup.EnsureSiteLiveTable site
-        On Error Resume Next
-        Set GetLiveTable = ws.ListObjects(tblName)
-        On Error GoTo 0
+        Set GetLiveTable = Helpers.GetSiteTable(Schema.SHEET_LOG, Schema.LIVE_TABLE_PREFIX, site)
     End If
 End Function

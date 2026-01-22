@@ -26,7 +26,6 @@ Public Type State
     Vol As Double
     Chem(1 To 7) As Double
     Hidden(1 To 7) As Double
-    HidVol As Double
 End Type
 
 Public Type Config
@@ -62,14 +61,9 @@ Public Function MetricName(ByVal idx As Long) As String
     If idx >= 1 And idx <= METRIC_COUNT Then MetricName = mNames(idx - 1)
 End Function
 
-Public Function MetricNames() As Variant
-    If IsEmpty(mNames) Then mNames = Array("EC", "F_U", "F_Mn", "SO4", "Mg", "Ca", "TAN")
-    MetricNames = mNames
-End Function
-
 Public Function CopyState(ByRef s As State) As State
     Dim c As State, i As Long
-    c.Vol = s.Vol: c.HidVol = s.HidVol
+    c.Vol = s.Vol
     For i = 1 To METRIC_COUNT: c.Chem(i) = s.Chem(i): c.Hidden(i) = s.Hidden(i): Next i
     CopyState = c
 End Function
